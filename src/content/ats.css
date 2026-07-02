@@ -1,0 +1,109 @@
+/* Easy Apply — estilos inyectados en ATS (prefijo ea- para no chocar) */
+
+.ea-filled {
+  outline: 2px solid #7c6cf0 !important;
+  outline-offset: 1px;
+  border-radius: 4px;
+  transition: outline-color 0.4s;
+}
+
+.ea-btn-wrap {
+  display: inline-block;
+  margin: 4px 0 4px 8px;
+  vertical-align: middle;
+}
+
+.ea-btn {
+  all: initial;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #7c6cf0;
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 12px;
+  line-height: 1;
+  display: inline-block;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.ea-btn:hover {
+  background: #6a59e8;
+}
+
+.ea-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ea-btn.ea-approve {
+  background: #1fa860;
+}
+
+.ea-btn.ea-approve:hover {
+  background: #178f50;
+}
+
+.ea-btn.ea-discard {
+  background: #999;
+  padding: 5px 9px;
+}
+
+.ea-review {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #f3f0ff;
+  border: 1px solid #d9d2fb;
+  border-radius: 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 12.5px;
+}
+
+.ea-review-info {
+  color: #4a3fb5;
+  flex: 1;
+}
+
+.ea-file-badge {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #fff7e0;
+  border: 1px dashed #e0b93f;
+  border-radius: 8px;
+  color: #7a5d00;
+  font-family: system-ui, sans-serif;
+  font-size: 12.5px;
+  width: fit-content;
+}
+
+.ea-group-holder {
+  margin-top: 4px;
+}
+
+.ea-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  background: #22203a;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 13.5px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+  max-width: 360px;
+}
+
+.ea-toast.ea-show {
+  opacity: 1;
+  transform: translateY(0);
+}

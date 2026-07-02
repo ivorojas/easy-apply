@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Easy Apply — Panel</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header>
+    <h1>✨ Easy Apply</h1>
+    <p class="sub">Panel seguro: acá la extensión propone, vos copiás y pegás.</p>
+  </header>
+
+  <section id="linkedin-mode" class="card">
+    <h2>Modo en LinkedIn</h2>
+    <label class="radio">
+      <input type="radio" name="limode" value="assistant" />
+      <span><strong>Asistente</strong> — solo lee el texto ya visible en tu pantalla y te muestra las preguntas acá. Cero clicks, cero tipeo, cero envíos.</span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="limode" value="off" />
+      <span><strong>Apagado total</strong> — no lee nada de LinkedIn. Vos pegás la pregunta abajo a mano.</span>
+    </label>
+    <p class="note">En LinkedIn la extensión jamás rellena, clickea ni envía. Todo lo hacen tus manos.</p>
+  </section>
+
+  <section class="card">
+    <h2>Leer preguntas de la pantalla</h2>
+    <p class="note">Funciona en el modal de Easy Apply de LinkedIn (modo asistente).</p>
+    <button id="scan" class="btn primary">👀 Leer pantalla</button>
+    <div id="scan-result"></div>
+  </section>
+
+  <section class="card">
+    <h2>Pregunta manual</h2>
+    <p class="note">Pegá cualquier pregunta (de LinkedIn o de donde sea) y te genero la respuesta con tu perfil.</p>
+    <textarea id="manual-q" rows="3" placeholder="Pegá acá la pregunta…"></textarea>
+    <textarea id="manual-ctx" rows="3" placeholder="Opcional: pegá el título/descripción del aviso para respuestas a medida…"></textarea>
+    <button id="manual-gen" class="btn primary">✨ Generar respuesta</button>
+    <div id="manual-result"></div>
+  </section>
+
+  <footer>
+    <button id="open-options" class="btn ghost">⚙️ Ajustes y memoria</button>
+  </footer>
+
+  <script src="panel.js"></script>
+</body>
+</html>

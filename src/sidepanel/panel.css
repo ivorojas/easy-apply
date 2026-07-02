@@ -1,0 +1,159 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13.5px;
+  background: #14131f;
+  color: #e8e6f5;
+  padding: 14px;
+  min-width: 300px;
+}
+
+header {
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+.sub {
+  color: #a9a5c9;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.card {
+  background: #1e1c30;
+  border: 1px solid #2e2b4a;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-size: 13.5px;
+  margin-bottom: 8px;
+  color: #cfcaf0;
+}
+
+.note {
+  color: #8f8ab3;
+  font-size: 11.5px;
+  margin: 6px 0;
+}
+
+.radio {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0;
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.radio input {
+  margin-top: 2px;
+}
+
+textarea {
+  width: 100%;
+  background: #14131f;
+  color: #e8e6f5;
+  border: 1px solid #3a3660;
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+
+.btn.primary {
+  background: #7c6cf0;
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #6a59e8;
+}
+
+.btn.primary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: #a9a5c9;
+  border: 1px solid #3a3660;
+  width: 100%;
+}
+
+.btn.small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.q-item {
+  border: 1px solid #2e2b4a;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.q-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.q-kind {
+  font-size: 11px;
+  color: #8f8ab3;
+  margin-bottom: 6px;
+}
+
+.q-options {
+  font-size: 12px;
+  color: #b5b0d8;
+  margin-bottom: 6px;
+}
+
+.answer {
+  background: #14131f;
+  border: 1px solid #3a3660;
+  border-radius: 8px;
+  padding: 8px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+}
+
+.answer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.status {
+  color: #f0c674;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.status.ok {
+  color: #6fe3a1;
+}
+
+footer {
+  margin-top: 4px;
+}

@@ -1,0 +1,145 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  width: 320px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13.5px;
+  background: #14131f;
+  color: #e8e6f5;
+  padding: 14px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-size: 17px;
+}
+
+.version {
+  color: #8f8ab3;
+  font-size: 11.5px;
+}
+
+.site-status {
+  background: #1e1c30;
+  border: 1px solid #2e2b4a;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.site-status.full {
+  border-color: #2f6b4a;
+}
+
+.site-status.safe {
+  border-color: #7a5d00;
+}
+
+.warn {
+  background: #3a2d10;
+  border: 1px solid #7a5d00;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+
+.warn a {
+  color: #f0c674;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+}
+
+.btn.primary {
+  background: #7c6cf0;
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #6a59e8;
+}
+
+.btn.primary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: #cfcaf0;
+  border: 1px solid #3a3660;
+}
+
+.btn.small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.card {
+  background: #1e1c30;
+  border: 1px solid #2e2b4a;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#update-status {
+  font-size: 12px;
+  color: #a9a5c9;
+}
+
+#do-update,
+#reload-ext {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.help {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #a9a5c9;
+  line-height: 1.45;
+}
+
+code {
+  background: #14131f;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+footer {
+  margin-top: 12px;
+  text-align: center;
+  color: #6f6a94;
+  font-size: 11px;
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Easy Apply</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>✨ Easy Apply</h1>
+    <span id="version" class="version"></span>
+  </header>
+
+  <div id="site-status" class="site-status">Detectando sitio…</div>
+  <div id="apikey-warning" class="warn" hidden>⚠️ Falta tu API key de Gemini. <a href="#" id="go-options">Cargala en Ajustes</a>.</div>
+
+  <div class="actions">
+    <button id="refill" class="btn primary" hidden>🔄 Rellenar de nuevo</button>
+    <button id="open-panel" class="btn primary">🧭 Abrir panel</button>
+    <button id="options" class="btn ghost">⚙️ Ajustes y memoria</button>
+  </div>
+
+  <section class="update card">
+    <div class="update-row">
+      <span id="update-status">Versión instalada.</span>
+      <button id="check-update" class="btn small ghost">Buscar actualización</button>
+    </div>
+    <button id="do-update" class="btn small primary" hidden>⬇️ Actualizar ahora</button>
+    <div id="update-help" class="help" hidden>
+      Para que el botón funcione, corré una sola vez <code>updater\instalar.bat</code> en la carpeta de la
+      extensión. Mientras tanto: doble click a <code>actualizar.bat</code> y después tocá
+      <b>Recargar</b> acá abajo.
+    </div>
+    <button id="reload-ext" class="btn small ghost" hidden>♻️ Recargar extensión</button>
+  </section>
+
+  <footer>Nunca envía nada solo. Vos revisás y mandás.</footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

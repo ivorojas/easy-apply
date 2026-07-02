@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Easy Apply — Ajustes y memoria</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>✨ Easy Apply — Ajustes y memoria</h1>
+      <p class="sub">Todo se guarda solo mientras escribís, únicamente en tu navegador. <span id="save-state"></span></p>
+    </header>
+
+    <section class="card">
+      <h2>🤖 Inteligencia artificial (Gemini)</h2>
+      <div class="grid two">
+        <label>
+          API key de Gemini
+          <span class="row">
+            <input type="password" id="apiKey" placeholder="Pegala acá — nunca sale de tu navegador" autocomplete="off" />
+            <button id="toggle-key" class="btn ghost small" type="button">👁</button>
+          </span>
+          <small>Conseguila gratis en <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>. Queda guardada localmente: no la vuelvas a cargar, y no viaja a ningún servidor nuestro.</small>
+        </label>
+        <label>
+          Modelo
+          <input type="text" id="model" list="models" />
+          <datalist id="models">
+            <option value="gemini-2.5-flash-lite"></option>
+            <option value="gemini-2.5-flash"></option>
+            <option value="gemini-2.0-flash-lite"></option>
+          </datalist>
+          <small>Por defecto el más barato y rápido.</small>
+        </label>
+      </div>
+      <button id="test-api" class="btn ghost small" type="button">Probar conexión</button>
+      <span id="test-result"></span>
+    </section>
+
+    <section class="card">
+      <h2>🪪 Datos duros <small class="inline">(se rellenan solos, sin IA — son datos, se copian)</small></h2>
+      <div class="grid three">
+        <label>Nombre <input type="text" id="firstName" /></label>
+        <label>Apellido <input type="text" id="lastName" /></label>
+        <label>Email <input type="email" id="email" /></label>
+        <label>Teléfono / celu <input type="text" id="phone" placeholder="+54 9 11 ..." /></label>
+        <label>Ubicación <input type="text" id="location" placeholder="Buenos Aires, Argentina" /></label>
+        <label>Años de experiencia <input type="text" id="yearsExp" /></label>
+        <label>LinkedIn (URL) <input type="url" id="linkedin" placeholder="https://linkedin.com/in/…" /></label>
+        <label>Portfolio / web <input type="url" id="portfolio" /></label>
+        <label>GitHub <input type="url" id="github" /></label>
+        <label>Empresa actual <input type="text" id="currentCompany" /></label>
+        <label>¿Autorizado a trabajar? <input type="text" id="workAuth" placeholder="Sí, en Argentina / EE.UU. con visa…" /></label>
+        <label>¿Necesitás visa/sponsorship? <input type="text" id="needsVisa" placeholder="No / Sí, para…" /></label>
+        <label>Expectativa salarial <input type="text" id="salary" placeholder="USD 2000/mes (opcional)" /></label>
+        <label>Disponibilidad <input type="text" id="availability" placeholder="Inmediata / 2 semanas…" /></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>🧠 Super memoria <small class="inline">(la caja gigante del "todo")</small></h2>
+      <p class="note">Meté acá TODO sin ordenar: experiencia, proyectos, automatizaciones, anécdotas, logros, herramientas, lo que sea. De acá saca material la IA para responder preguntas únicas. Regla de oro: si no está acá, la IA no lo inventa — te avisa que no tiene con qué responder.</p>
+      <textarea id="blob" rows="16" placeholder="Ej: Automaticé el reporte semanal de ventas con n8n y Google Sheets, ahorrando 5 horas por semana…&#10;&#10;Trabajé 2 años en atención al cliente en…&#10;&#10;Mi proyecto favorito fue…"></textarea>
+    </section>
+
+    <section class="card">
+      <h2>🛡️ LinkedIn — modo seguro</h2>
+      <label class="radio"><input type="radio" name="linkedinMode" value="assistant" /> <span><b>Asistente</b> — solo lee texto ya visible en tu pantalla y lo muestra en el panel para copiar. Cero clicks, cero tipeo, cero envíos.</span></label>
+      <label class="radio"><input type="radio" name="linkedinMode" value="off" /> <span><b>Apagado total</b> — no lee nada de LinkedIn; vos pegás la pregunta en el panel a mano.</span></label>
+      <p class="note">En LinkedIn la extensión jamás rellena campos, clickea botones ni manda pedidos a sus servidores, en ningún modo.</p>
+    </section>
+
+    <section class="card">
+      <h2>♻️ Respuestas aprobadas <small class="inline">(caché — <span id="cache-count">0</span>)</small></h2>
+      <p class="note">Cada respuesta que aprobás se guarda como pregunta → respuesta y se reutiliza cuando aparece una parecida. Con el tiempo usás menos IA.</p>
+      <div id="cache-list"></div>
+      <button id="clear-cache" class="btn danger small" type="button">🗑 Vaciar caché</button>
+    </section>
+
+    <section class="card">
+      <h2>📦 Respaldo</h2>
+      <button id="export" class="btn ghost small" type="button">⬇️ Exportar todo (JSON)</button>
+      <button id="import" class="btn ghost small" type="button">⬆️ Importar</button>
+      <input type="file" id="import-file" accept="application/json" hidden />
+      <small class="note">Incluye perfil, memoria, caché y ajustes (la API key también — guardá el archivo con cuidado).</small>
+    </section>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

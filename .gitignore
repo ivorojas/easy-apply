@@ -1,0 +1,11 @@
+# Secretos y archivos locales — NUNCA subir
+*.pem
+*.key
+easy-apply-backup.json
+# El manifiesto del native host se genera por máquina en instalar.bat
+updater/com.easyapply.updater.json
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
