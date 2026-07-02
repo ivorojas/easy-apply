@@ -1,0 +1,86 @@
+# CLAUDE.md — Easy Apply
+
+Contexto para Claude Code al trabajar en este repo. Extensión de navegador
+(Manifest V3) que rellena postulaciones de trabajo: datos duros en automático y
+preguntas únicas con IA (Gemini). **Nunca envía nada solo; nunca inventa.**
+
+## Reglas de producto INQUEBRANTABLES (del brief)
+
+Antes de tocar cualquier cosa, estas reglas mandan sobre cualquier "mejora":
+
+1. **Nunca auto-envía.** Ni un click a enviar / siguiente / aplicar. La extensión
+   rellena y sugiere; el submit final es del usuario, siempre.
+2. **Nunca inventa.** Si el perfil no tiene con qué responder, devuelve
+   `{"no_info": true}` y el campo queda vacío. Un campo vacío es mejor que una
+   respuesta inventada.
+3. **LinkedIn = modo pasivo, sin excepción.** En `src/content/linkedin.js` está
+   PROHIBIDO: escribir en campos, clickear, hacer fetch/XHR a LinkedIn, o
+   modificar el DOM. Solo puede LEER texto visible, y solo en modo "assistant".
+   Cualquier cambio que rompa esto es un bug crítico (riesgo de baneo del usuario).
+4. **Menús/radios/checkboxes se ELIGEN, no se escriben.** Nunca texto libre donde
+   solo se puede seleccionar.
+5. **El CV no se sube por código** (barrera del navegador). Se marca "subilo a mano".
+6. **Respetar el límite de caracteres** de cada campo (`maxLength`).
+
+## Arquitectura
+
+```
+manifest.json          MV3. Campo `key` fija el ID: abgfpmgoacojapfgchfgmbhilckahgcl
+src/background.js       Service worker (module). TODA llamada a Gemini vive acá.
+                        Caché, similitud de preguntas (Jaccard), chequeo de update.
+src/content/ats.js      Content script Greenhouse + Lever. Autofill duro, botón IA
+                        por pregunta, chooser de opciones, badge de CV. Prefijo ea-.
+src/content/ats.css     Estilos inyectados (all:initial en botones para no heredar).
+src/content/linkedin.js SOLO LECTURA. Modo seguro. Ver regla #3.
+src/sidepanel/          Panel lateral: modo seguro LinkedIn + generador manual.
+src/popup/              Estado del sitio + botón "Actualizar ahora".
+src/options/            Ajustes: datos duros + super memoria (blob) + caché + IA.
+updater/                Native messaging host (host.py) = git pull + reload.
+docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementado.
+```
+
+### Flujo de datos
+
+- **Todo es local**: `chrome.storage.local` con claves `profile`, `settings`,
+  `answerCache`. No hay backend. La API key del usuario vive acá, nunca en el repo.
+- **Perfil** = datos duros estructurados (`firstName`, `email`, …) + `blob` (la
+  "super memoria", caja única sin secciones). El blob es la fuente por defecto para IA.
+- **Mensajería**: content scripts y UI hablan al service worker por
+  `chrome.runtime.sendMessage` con `{type: ...}`. Tipos: `GENERATE_ANSWER`,
+  `CHOOSE_OPTION`, `SAVE_APPROVED`, `CHECK_UPDATE`, `UPDATE_NOW`, `GET_SETTINGS`.
+- **Caché con aprendizaje**: al aprobar, se guarda `{q, a}`. En `GENERATE_ANSWER`,
+  similitud ≥0.85 reusa directo; ≥0.35 se pasan como ejemplos de estilo a Gemini.
+
+## IA
+
+- Gemini vía REST (`generativelanguage.googleapis.com`). Modelo default
+  `gemini-2.5-flash-lite` (barato y rápido — preferencia del usuario, no cambiar
+  sin pedir). Se fuerza `responseMimeType: application/json`.
+- Prompts en español, en `background.js`. Siempre incluyen la regla NEVER_INVENT.
+
+## Actualización (requisito no-negociable del brief)
+
+- **Código**: `updater/host.py` (native messaging) hace `git pull --ff-only` +
+  `chrome.runtime.reload()`. El usuario corre `updater/instalar.bat` UNA vez
+  (registra en HKCU, sin admin). Plan B: `actualizar.bat` + botón "Recargar".
+- **Chrome prohíbe código remoto y self-hosting**: por eso el update es git pull
+  local, no descarga de código ejecutable en runtime. No romper esto.
+- Al subir una versión: incrementar `version` en `manifest.json`. El popup compara
+  contra el `manifest.json` de `raw.githubusercontent.com/.../main/`.
+
+## Convenciones
+
+- Sin build step, sin dependencias npm. JS vanilla, ES modules en el worker.
+- Verificar sintaxis antes de commitear: `node --check <archivo>` en cada JS.
+- Todo el texto de UI en español rioplatense (voseo).
+- Al agregar un ATS nuevo: sumar `host_permissions`/`content_scripts` matches en
+  el manifest y extender `extractJobContext()` en `ats.js`. Selectores de labels
+  ya son bastante genéricos; probar contra el ATS real e iterar.
+- Repo público: NUNCA commitear API keys ni `.pem`. Ver `.gitignore`.
+
+## Estado (2026-07-02)
+
+v0.1.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
+LinkedIn seguro. Pendiente futuro: más ATS (Ashby, Workable, SmartRecruiters,
+BambooHR, Workday), secciones opcionales de memoria, backend Supabase, publicación
+unlisted.
