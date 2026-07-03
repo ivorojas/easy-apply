@@ -147,6 +147,23 @@ function profileBlock(profile) {
     sections.push(`CURRÍCULUM (texto extraído del CV que subió el candidato):\n${String(profile.cvText).slice(0, 8000)}`);
   }
 
+  // Biblioteca de documentos extra (portfolio, experiencia, casos…). Se
+  // incluyen todos hasta un presupuesto de caracteres para no reventar el prompt.
+  if (Array.isArray(profile.docs) && profile.docs.length) {
+    let budget = 16000;
+    const chunks = [];
+    for (const d of profile.docs) {
+      if (budget <= 0) break;
+      const slice = String(d.text || '').slice(0, Math.min(6000, budget));
+      if (!slice) continue;
+      chunks.push(`— ${d.name || 'documento'} —\n${slice}`);
+      budget -= slice.length;
+    }
+    if (chunks.length) {
+      sections.push(`DOCUMENTOS DEL CANDIDATO (PDF/textos que subió con su experiencia y trabajos):\n${chunks.join('\n\n')}`);
+    }
+  }
+
   const enr = profile.enrichment || {};
   const enrParts = [];
   for (const key of ['github', 'portfolio']) {
@@ -363,8 +380,9 @@ async function enrichLink({ kind, url }) {
 
 async function extractHardFields() {
   const profile = await getProfile();
-  const source = [profile.blob, profile.cvText].filter(Boolean).join('\n\n');
-  if (!source.trim()) return { error: 'No hay CV ni super memoria de dónde extraer' };
+  const docsText = Array.isArray(profile.docs) ? profile.docs.map((d) => d.text).join('\n\n') : '';
+  const source = [profile.blob, profile.cvText, docsText].filter(Boolean).join('\n\n');
+  if (!source.trim()) return { error: 'No hay CV, documentos ni super memoria de dónde extraer' };
   const prompt = `Extraé datos de contacto del siguiente texto de un candidato. ${NEVER_INVENT}
 Devolvé SOLO un JSON con las claves que encuentres (omití las que no estén, NO inventes):
 {"firstName","lastName","email","phone","location","yearsExp","linkedin","portfolio","github","currentCompany"}

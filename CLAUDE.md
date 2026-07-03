@@ -45,8 +45,10 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
   `answerCache`. No hay backend. La API key del usuario vive acá, nunca en el repo.
 - **Perfil** = datos duros estructurados (`firstName`, `email`, …) + `blob` (la
   "super memoria") + `cvText`/`cvName` (texto del CV, parseado UNA vez al subir con
-  pdf.js vendrado en `vendor/pdf/`) + `enrichment` (`{github, portfolio}` traído de
-  los links del usuario). Todo eso entra al contexto de IA vía `profileBlock()`.
+  pdf.js vendrado en `vendor/pdf/`) + `docs` (biblioteca ilimitada de PDF/TXT/MD:
+  `[{id,name,text,addedAt}]`, cada uno parseado una vez) + `enrichment` (`{github,
+  portfolio}` traído de los links). Todo eso entra al contexto de IA vía `profileBlock()`
+  (los docs con presupuesto de ~16k chars). `unlimitedStorage` permite guardar sin tope.
   Los datos duros son OPCIONALES (desplegable en options): si el usuario pone todo
   en el blob, la IA responde igual; los campos duros solo alimentan el autofill
   determinístico. `EXTRACT_HARD_FIELDS` los propone desde CV/blob para que el user revise.
@@ -93,8 +95,9 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
 
 ## Estado (2026-07-02)
 
-v0.2.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
+v0.3.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
 LinkedIn seguro. v0.2 sumó: teléfono con country picker, CV parseado (pdf.js),
 enriquecimiento de links (GitHub/portfolio), datos duros opcionales/desplegables.
+v0.3 sumó: biblioteca ilimitada de documentos extra (`profile.docs`) + `unlimitedStorage`.
 Pendiente futuro: más ATS (Ashby, Workable, SmartRecruiters, BambooHR, Workday),
 secciones opcionales de memoria, backend Supabase, publicación unlisted.

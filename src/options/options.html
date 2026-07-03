@@ -60,6 +60,17 @@
     </section>
 
     <section class="card">
+      <h2>📚 Documentos extra <small class="inline">(<span id="docs-count">0</span> — subí los que quieras)</small></h2>
+      <p class="note">Además del CV, sumá todos los PDF/TXT/MD que quieras: portfolio, casos de trabajo, experiencia detallada, certificados, lo que sea. Cada uno <b>se lee una vez al subirlo</b> y queda guardado para siempre como memoria; la IA los usa a todos como contexto. Podés subir varios de una.</p>
+      <div class="row">
+        <button id="docs-pick" class="btn ghost small" type="button">➕ Agregar documentos</button>
+        <input type="file" id="docs-file" accept=".pdf,.txt,.md,.markdown,text/plain,application/pdf" multiple hidden />
+      </div>
+      <div id="docs-status" class="note"></div>
+      <div id="docs-list"></div>
+    </section>
+
+    <section class="card">
       <h2>🔗 Traer info de tus links <small class="inline">(GitHub y portfolio)</small></h2>
       <p class="note">Pegá tus links y tocá “Traer info”. De <b>GitHub</b> saco bio, empresa, ubicación y tus repos destacados; de tu <b>portfolio/web</b> saco el texto de la página. Todo eso queda como contexto para la IA. <b>LinkedIn no</b>: la extensión nunca toca sus servidores (y devolvería un muro de login) — esa info pegala en la super memoria.</p>
       <div class="link-row">

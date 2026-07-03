@@ -33,6 +33,7 @@ async function load() {
   $('#linkGithub').value = profile.github || '';
   $('#linkPortfolio').value = profile.portfolio || '';
   renderCvStatus(profile);
+  renderDocs(profile);
   renderEnrichment('github', profile.enrichment?.github);
   renderEnrichment('portfolio', profile.enrichment?.portfolio);
   await renderCache();
@@ -175,6 +176,15 @@ async function extractPdfText(file) {
   return out.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Lee texto de un archivo (PDF con pdf.js; TXT/MD directo).
+async function readFileText(file) {
+  if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+    if (!window.pdfjsLib) throw new Error('No cargó el lector de PDF');
+    return (await extractPdfText(file)).trim();
+  }
+  return (await file.text()).trim();
+}
+
 function renderCvStatus(profile) {
   const status = $('#cv-status');
   const clear = $('#cv-clear');
@@ -199,14 +209,7 @@ $('#cv-file').addEventListener('change', async (e) => {
   const status = $('#cv-status');
   status.textContent = '⏳ Leyendo el CV…';
   try {
-    let text = '';
-    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
-      if (!window.pdfjsLib) throw new Error('No cargó el lector de PDF');
-      text = await extractPdfText(file);
-    } else {
-      text = await file.text();
-    }
-    text = text.trim();
+    const text = await readFileText(file);
     if (!text) {
       status.textContent = '⚠️ No pude sacar texto de ese archivo. ¿Es un PDF escaneado (imagen)? Probá con un PDF de texto o pegá el contenido en la super memoria.';
       e.target.value = '';
@@ -230,6 +233,91 @@ $('#cv-clear').addEventListener('click', async () => {
   delete profile.cvName;
   await chrome.storage.local.set({ profile });
   renderCvStatus(profile);
+});
+
+// --- Biblioteca de documentos extra (ilimitada) ---------------------------------
+
+function renderDocs(profile) {
+  const docs = Array.isArray(profile.docs) ? profile.docs : [];
+  $('#docs-count').textContent = String(docs.length);
+  const list = $('#docs-list');
+  list.innerHTML = '';
+  if (!docs.length) {
+    list.innerHTML = '<p class="note">Todavía no subiste documentos extra.</p>';
+    return;
+  }
+  docs.forEach((doc) => {
+    const item = document.createElement('div');
+    item.className = 'cache-item';
+    const texts = document.createElement('div');
+    texts.className = 'texts';
+    const q = document.createElement('div');
+    q.className = 'cache-q';
+    q.textContent = '📄 ' + (doc.name || 'documento');
+    const meta = document.createElement('div');
+    meta.className = 'cache-a';
+    meta.textContent = `${(doc.text || '').length.toLocaleString('es')} caracteres leídos`;
+    const det = document.createElement('details');
+    const sum = document.createElement('summary');
+    sum.textContent = 'Ver texto';
+    sum.style.cssText = 'color:#8f8ab3;font-size:12px;cursor:pointer';
+    const pre = document.createElement('pre');
+    pre.className = 'preview';
+    pre.textContent = (doc.text || '').slice(0, 4000);
+    det.append(sum, pre);
+    texts.append(q, meta, det);
+    const del = document.createElement('button');
+    del.className = 'cache-del';
+    del.textContent = '🗑';
+    del.title = 'Quitar este documento';
+    del.addEventListener('click', async () => {
+      const { profile = {} } = await chrome.storage.local.get('profile');
+      profile.docs = (profile.docs || []).filter((d) => d.id !== doc.id);
+      await chrome.storage.local.set({ profile });
+      renderDocs(profile);
+    });
+    item.append(texts, del);
+    list.appendChild(item);
+  });
+}
+
+$('#docs-pick').addEventListener('click', () => $('#docs-file').click());
+
+$('#docs-file').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  const status = $('#docs-status');
+  const { profile = {} } = await chrome.storage.local.get('profile');
+  profile.docs = Array.isArray(profile.docs) ? profile.docs : [];
+  let added = 0;
+  let failed = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    status.textContent = `⏳ Leyendo ${i + 1}/${files.length}: ${file.name}…`;
+    try {
+      const text = await readFileText(file);
+      if (!text) {
+        failed++;
+        continue;
+      }
+      profile.docs.push({
+        id: 'd' + Date.now() + '_' + i,
+        name: file.name,
+        text: text.slice(0, 40000),
+        addedAt: new Date().toISOString()
+      });
+      added++;
+    } catch {
+      failed++;
+    }
+  }
+  await chrome.storage.local.set({ profile });
+  renderDocs(profile);
+  status.textContent =
+    `✅ Agregué ${added} documento(s).` +
+    (failed ? ` ⚠️ ${failed} sin texto (¿PDF escaneado como imagen?).` : '');
+  if (added) flashSaved();
+  e.target.value = '';
 });
 
 // --- Enriquecimiento desde links ------------------------------------------------

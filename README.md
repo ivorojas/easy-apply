@@ -7,6 +7,7 @@ Extensión de navegador (Chrome / Edge / Chromium, Manifest V3) que hace el trab
 - **Elige la opción correcta** en menús, radios y checkboxes (no escribe donde solo se puede seleccionar).
 - **"Super memoria" editable**: una caja gigante con toda tu info, de donde la IA saca material.
 - **Subís tu CV y se lee una vez** (PDF/TXT/MD): el texto queda como contexto para la IA, sin re-procesar en cada uso.
+- **Biblioteca de documentos ilimitada**: sumá todos los PDF/TXT/MD que quieras (portfolio, casos, experiencia); cada uno se lee al subirlo y queda guardado como memoria permanente.
 - **Traé info de tus links**: botón para importar tu **GitHub** (bio + repos) y tu **portfolio/web** (texto de la página) como contexto. *(LinkedIn no se toca, por seguridad.)*
 - **Teléfono con banderita**: si el formulario tiene *country picker*, intenta elegir el país solo y deja el número sin el código; si no puede, te avisa cuál tocar.
 - **Datos duros opcionales**: podés cargarlos aparte o poner todo en la super memoria; hay un botón para autocompletarlos desde tu CV/memoria (vos revisás).
