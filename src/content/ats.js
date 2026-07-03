@@ -115,7 +115,12 @@
       const desc = document.querySelector('.posting-page [data-qa="job-description"], .section-wrapper, .content');
       if (desc) description = desc.innerText;
     }
-    if (!description) description = (document.querySelector('main') || document.body).innerText.slice(0, 8000);
+    // Fallback SOLO si la página parece un aviso de verdad (no la página del
+    // formulario). Así no guardamos ni usamos "basura" como contexto.
+    if (!description) {
+      const body = (document.querySelector('main') || document.body).innerText || '';
+      if (looksLikePosting(body)) description = body;
+    }
 
     jobContext = {
       title: title || document.title,
@@ -124,6 +129,15 @@
       url: location.href
     };
     return jobContext;
+  }
+
+  const POSTING_SIGNALS = /(responsib|requirement|qualificat|what you.?ll do|what you will do|about the (role|job|position)|nice to have|we are looking|who you are|responsabilidad|requisito|qu[eé] har[aá]s|sobre el (rol|puesto|cargo)|buscamos|perfil buscado|beneficios|benefits|apply now|postul)/i;
+
+  function looksLikePosting(text) {
+    const d = (text || '').trim();
+    if (d.length < 500) return false;
+    if (POSTING_SIGNALS.test(d)) return true;
+    return /greenhouse\.io|lever\.co|ashby|workable|smartrecruiters|bamboohr|myworkday|jobs|careers|empleo|trabaj/i.test(location.hostname + location.pathname);
   }
 
   // -------------------------------------------------------------------------
@@ -639,6 +653,18 @@
   // Orquestación
   // -------------------------------------------------------------------------
 
+  // Guarda el aviso si esta página tiene una descripción jugosa, para tenerlo
+  // disponible cuando el formulario esté en otra página/paso/pop-up.
+  let jobSaved = false;
+  function saveJobIfStrong() {
+    if (jobSaved || window.top !== window) return;
+    const ctx = extractJobContext();
+    if ((ctx.description || '').trim().length >= 250) {
+      jobSaved = true;
+      chrome.runtime.sendMessage({ type: 'SAVE_JOB', jobContext: ctx }).catch(() => {});
+    }
+  }
+
   let scanTimer = null;
   async function scan(announce) {
     if (!profile) {
@@ -652,6 +678,7 @@
     processRadioAndCheckboxGroups(root);
     markFileInputs(root);
     ensureFab();
+    saveJobIfStrong();
     const topFrame = window.top === window;
     if (filled > 0) toast(`completé ${filled} campo${filled > 1 ? 's' : ''} con tus datos — revisalos`);
     else if (announce && topFrame && !Object.keys(profile).length) {

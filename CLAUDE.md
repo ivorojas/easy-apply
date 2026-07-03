@@ -74,6 +74,13 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
   `gemini-2.5-flash-lite` (barato y rápido — preferencia del usuario, no cambiar
   sin pedir). Se fuerza `responseMimeType: application/json`.
 - Prompts en español, en `background.js`. Siempre incluyen la regla NEVER_INVENT.
+- **Idioma de la respuesta**: `detectLang()` decide es/en desde pregunta + descripción
+  del aviso y se lo impone al modelo (una postulación en inglés se responde en inglés).
+- **Contexto del aviso cross-página**: el aviso y el formulario suelen estar en
+  páginas/pasos distintos. `ats.js` guarda el aviso (`lastJob` en storage) cuando ve
+  una página que `looksLikePosting()`; `resolveJobContext()` en background usa el
+  guardado (si es reciente, <3h) cuando el contexto de la página del formulario es
+  flojo. El panel permite capturar/ver/borrar el aviso a mano (`SAVE_JOB/GET_JOB/CLEAR_JOB`).
 
 ## Actualización (requisito no-negociable del brief)
 

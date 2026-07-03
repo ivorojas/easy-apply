@@ -226,6 +226,58 @@ function jobBlock(jobContext) {
   return parts.join('\n') || '(sin contexto del aviso)';
 }
 
+// Detecta idioma del formulario/aviso para responder en el idioma correcto.
+function detectLang(text) {
+  const t = (text || '').toLowerCase();
+  if (!t.trim()) return 'es';
+  if (/[ñ¿¡]/.test(t)) return 'es';
+  const en = (t.match(/\b(the|and|your|you|with|for|why|describe|tell|please|about|experience|role|company|we|our|are|is|to|in|of|this|position)\b/g) || []).length;
+  const es = (t.match(/\b(el|la|los|las|una|por|para|que|con|de|en|somos|nuestro|nuestra|experiencia|puesto|empresa|cont[aá]|describ[ií]|por qué|trabajo|sos|tenés)\b/g) || []).length;
+  if (/[áéíóú]/.test(t) && es >= en) return 'es';
+  return en > es ? 'en' : 'es';
+}
+
+// Contexto del aviso: si el de la página actual es flojo (formulario sin
+// descripción, típico cuando el aviso está en otra página/paso), usa el
+// "último aviso jugoso" que se guardó al verlo.
+const JOB_MAX_AGE_MS = 3 * 60 * 60 * 1000; // 3 horas
+
+function jobStrength(ctx) {
+  return (ctx?.description || '').trim().length;
+}
+
+async function resolveJobContext(incoming) {
+  if (jobStrength(incoming) >= 250) return incoming;
+  const { lastJob } = await chrome.storage.local.get('lastJob');
+  if (lastJob && jobStrength(lastJob) >= 120) {
+    const age = Date.now() - new Date(lastJob.savedAt || 0).getTime();
+    if (age <= JOB_MAX_AGE_MS) {
+      // Combina: título/empresa de la página actual si existen, descripción guardada.
+      return {
+        title: incoming?.title || lastJob.title,
+        company: incoming?.company || lastJob.company,
+        description: lastJob.description,
+        url: lastJob.url,
+        fromSaved: true
+      };
+    }
+  }
+  return incoming;
+}
+
+async function saveJob(ctx) {
+  if (jobStrength(ctx) < 120) return { ok: false, reason: 'weak' };
+  const lastJob = {
+    title: ctx.title || '',
+    company: ctx.company || '',
+    description: String(ctx.description || '').slice(0, 12000),
+    url: ctx.url || '',
+    savedAt: new Date().toISOString()
+  };
+  await chrome.storage.local.set({ lastJob });
+  return { ok: true, lastJob };
+}
+
 const NEVER_INVENT = `REGLA CRÍTICA E INQUEBRANTABLE: NUNCA inventes datos, experiencias, proyectos, números ni hechos que no estén en el perfil del candidato. Un campo sin responder es MEJOR que una respuesta inventada. Si el perfil no tiene información suficiente para responder, devolvé exactamente {"no_info": true}.`;
 
 async function generateAnswer({ question, jobContext, maxLength }) {
@@ -257,6 +309,10 @@ async function generateAnswer({ question, jobContext, maxLength }) {
     .map((s) => `PREGUNTA: ${s.entry.q}\nRESPUESTA APROBADA: ${s.entry.a}`)
     .join('\n---\n');
 
+  const job = await resolveJobContext(jobContext);
+  const lang = detectLang(question + ' ' + (job?.description || ''));
+  const langName = lang === 'en' ? 'INGLÉS (English)' : 'ESPAÑOL';
+
   const prompt = `Sos un asistente que ayuda a un candidato a responder preguntas de formularios de postulación de trabajo. Escribís EN NOMBRE del candidato, en primera persona.
 
 ${NEVER_INVENT}
@@ -265,13 +321,13 @@ PERFIL DEL CANDIDATO (única fuente de verdad sobre él):
 ${profileBlock(profile)}
 
 CONTEXTO DEL PUESTO AL QUE SE POSTULA:
-${jobBlock(jobContext)}
+${jobBlock(job)}
 ${examples ? `\nRESPUESTAS QUE EL CANDIDATO YA APROBÓ PARA PREGUNTAS PARECIDAS (imitá su estilo y contenido si aplican):\n${examples}\n` : ''}
 PREGUNTA DEL FORMULARIO:
 "${question}"
 
 INSTRUCCIONES:
-- Respondé en el MISMO IDIOMA en que está escrita la pregunta.
+- IDIOMA: escribí la respuesta ÍNTEGRAMENTE en ${langName} (es el idioma del formulario/aviso). No mezcles idiomas ni traduzcas la pregunta.
 - ${maxLength ? `La respuesta debe tener MENOS de ${maxLength} caracteres (límite duro del campo).` : 'Sé breve: 2 a 4 oraciones salvo que la pregunta pida más.'}
 - Tono natural y concreto, primera persona, sin frases de relleno ni clichés.
 - Andá directo al contenido: nada de preámbulos tipo "Claro", "Mi respuesta es" ni repetir la pregunta.
@@ -284,11 +340,12 @@ INSTRUCCIONES:
   if (json.no_info || !json.answer) return { noInfo: true };
   let answer = String(json.answer).trim();
   if (maxLength && answer.length > maxLength) answer = answer.slice(0, maxLength).trim();
-  return { answer, source: 'ai' };
+  return { answer, source: 'ai', usedSavedJob: !!job?.fromSaved };
 }
 
 async function chooseOption({ question, options, multi, jobContext }) {
   const profile = await getProfile();
+  const job = await resolveJobContext(jobContext);
   const list = options.map((o, i) => `${i}: ${o}`).join('\n');
   const prompt = `Sos un asistente que ayuda a un candidato a completar formularios de postulación. Este campo NO es de texto libre: solo se puede ELEGIR entre opciones.
 
@@ -298,7 +355,7 @@ PERFIL DEL CANDIDATO:
 ${profileBlock(profile)}
 
 CONTEXTO DEL PUESTO:
-${jobBlock(jobContext)}
+${jobBlock(job)}
 
 PREGUNTA DEL FORMULARIO:
 "${question}"
@@ -513,6 +570,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GENERATE_ANSWER: () => generateAnswer(msg),
     CHOOSE_OPTION: () => chooseOption(msg),
     SAVE_APPROVED: () => saveApproved(msg),
+    SAVE_JOB: () => saveJob(msg.jobContext),
+    GET_JOB: async () => (await chrome.storage.local.get('lastJob')).lastJob || null,
+    CLEAR_JOB: async () => {
+      await chrome.storage.local.remove('lastJob');
+      return { ok: true };
+    },
     ENRICH_LINK: () => enrichLink(msg),
     EXTRACT_HARD_FIELDS: () => extractHardFields(),
     CHECK_UPDATE: () => checkUpdate(),

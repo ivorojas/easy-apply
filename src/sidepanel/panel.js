@@ -61,6 +61,7 @@ async function generate(question, jobContext, maxLength, resultBox) {
   actions.append(copy, approve);
   resultBox.append(ans, actions);
   if (res.source === 'cache') status(resultBox, '♻️ Reusada de tu caché de respuestas aprobadas.', true);
+  else if (res.usedSavedJob) status(resultBox, '🎯 Usé el aviso que tenías guardado como contexto.', true);
 }
 
 async function chooseForPanel(question, options, jobContext, resultBox) {
@@ -159,4 +160,59 @@ $('#manual-gen').addEventListener('click', async () => {
 
 $('#open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
 
+// --- Aviso del puesto (contexto que puede vivir en otra página) -----------------
+
+async function refreshJob() {
+  const job = await chrome.runtime.sendMessage({ type: 'GET_JOB' });
+  const info = $('#job-info');
+  if (job && (job.title || job.description)) {
+    const when = job.savedAt ? new Date(job.savedAt).toLocaleString('es') : '';
+    info.innerHTML =
+      `<b>${job.title || 'Aviso'}</b>${job.company ? ' — ' + job.company : ''}<br>` +
+      `<span class="muted">${(job.description || '').length.toLocaleString('es')} caracteres · guardado ${when}</span>`;
+    $('#job-clear').hidden = false;
+  } else {
+    info.textContent = 'Sin aviso guardado todavía.';
+    $('#job-clear').hidden = true;
+  }
+}
+
+$('#job-capture').addEventListener('click', async () => {
+  const btn = $('#job-capture');
+  btn.disabled = true;
+  btn.textContent = '⏳…';
+  try {
+    const tab = await activeTab();
+    const url = tab?.url || '';
+    if (!tab?.id || !/^https?:/.test(url)) {
+      $('#job-info').textContent = 'Abrí la página del aviso y volvé a tocar.';
+      return;
+    }
+    let res;
+    try {
+      res = await chrome.tabs.sendMessage(tab.id, { type: /linkedin\.com/.test(url) ? 'LI_SCAN' : 'EA_READ' });
+    } catch {
+      $('#job-info').textContent = '🔄 Recargá esta pestaña una vez y reintentá.';
+      return;
+    }
+    const jc = res?.jobContext;
+    if (!jc || (jc.description || '').trim().length < 120) {
+      $('#job-info').textContent = 'No encontré una descripción clara en esta pestaña. Abrí la página del aviso (no la del formulario).';
+      return;
+    }
+    const saved = await chrome.runtime.sendMessage({ type: 'SAVE_JOB', jobContext: jc });
+    if (saved?.ok) await refreshJob();
+    else $('#job-info').textContent = 'La descripción es muy corta para guardarla como aviso.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📌 Capturar de esta pestaña';
+  }
+});
+
+$('#job-clear').addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({ type: 'CLEAR_JOB' });
+  await refreshJob();
+});
+
 loadMode();
+refreshJob();
