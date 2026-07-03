@@ -14,6 +14,11 @@ Extensión de navegador (Chrome / Edge / Chromium, Manifest V3) que hace el trab
 - **Aprende con el uso**: guarda las respuestas que aprobás y las reutiliza cuando aparece una pregunta parecida.
 - **LinkedIn en modo seguro**: panel de copiar/pegar, sin tocar la página, para cero riesgo de baneo.
 
+### Encendido/apagado
+
+- **Arranca apagada** cada vez que abrís el navegador. Con la extensión apagada no hace **nada** (no escanea, no rellena, no lee).
+- Un **toggle** en el popup la prende/apaga a mano. Queda encendida hasta que la apagás o cerrás el navegador.
+
 ### Reglas duras (en todos los sitios)
 
 - 🚫 **Nunca aprieta "enviar" / "siguiente" / "aplicar"**. El envío final es tuyo, siempre.

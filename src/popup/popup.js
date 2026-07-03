@@ -9,10 +9,42 @@ async function activeTab() {
   return tab;
 }
 
+// --- Encendido / apagado global -------------------------------------------------
+
+let enabled = false;
+
+function paintPower() {
+  const t = $('#power-toggle');
+  t.setAttribute('aria-checked', String(enabled));
+  $('#power-label').textContent = enabled ? 'Encendida' : 'Apagada';
+  document.querySelector('.power').classList.toggle('on', enabled);
+  $('#site-status').classList.toggle('dim', !enabled);
+  $('#refill').disabled = !enabled;
+}
+
+async function loadPower() {
+  const r = await chrome.runtime.sendMessage({ type: 'GET_ENABLED' });
+  enabled = !!r?.enabled;
+  paintPower();
+}
+
+$('#power-toggle').addEventListener('click', async () => {
+  enabled = !enabled;
+  paintPower();
+  await chrome.runtime.sendMessage({ type: 'SET_ENABLED', enabled });
+  detectSite();
+});
+
 async function detectSite() {
   const box = $('#site-status');
   const tab = await activeTab();
   const url = tab?.url || '';
+  if (!enabled) {
+    box.className = 'site-status dim';
+    box.innerHTML = '⏻ <b>Está apagada.</b> Prendé el toggle de arriba para que actúe en esta página. Se apaga sola cuando cerrás el navegador.';
+    $('#refill').hidden = true;
+    return;
+  }
   if (/linkedin\.com/.test(url)) {
     const { settings } = await chrome.storage.local.get('settings');
     const mode = settings?.linkedinMode || 'assistant';
@@ -105,6 +137,6 @@ $('#do-update').addEventListener('click', async () => {
 
 $('#reload-ext').addEventListener('click', () => chrome.runtime.reload());
 
-detectSite();
+loadPower().then(detectSite);
 checkApiKey();
 checkUpdate(true);

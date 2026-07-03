@@ -508,6 +508,50 @@ ${source.slice(0, 12000)}`;
 }
 
 // ---------------------------------------------------------------------------
+// Encendido/apagado global. Vive en storage.session: se borra SOLO cuando se
+// cierra el navegador. Por defecto arranca APAGADO en cada sesión de Chrome.
+// ---------------------------------------------------------------------------
+
+async function getEnabled() {
+  const { enabled } = await chrome.storage.session.get('enabled');
+  return !!enabled;
+}
+
+async function reflectBadge(enabled) {
+  try {
+    await chrome.action.setBadgeText({ text: enabled ? 'ON' : '' });
+    await chrome.action.setBadgeBackgroundColor({ color: enabled ? '#1fa860' : '#888888' });
+  } catch {}
+}
+
+async function broadcastEnabled(enabled) {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({}); // sin filtro de url → no requiere permiso "tabs"
+  } catch {}
+  for (const t of tabs) {
+    if (t.id) chrome.tabs.sendMessage(t.id, { type: 'EA_SET_ENABLED', enabled }).catch(() => {});
+  }
+}
+
+async function setEnabled(enabled) {
+  await chrome.storage.session.set({ enabled: !!enabled });
+  await reflectBadge(!!enabled);
+  await broadcastEnabled(!!enabled);
+  return { ok: true, enabled: !!enabled };
+}
+
+// Al arrancar el service worker, reflejar el estado actual (persistido en la
+// sesión del navegador) en el badge.
+getEnabled().then(reflectBadge);
+
+// Al abrir el navegador: forzar apagado.
+chrome.runtime.onStartup.addListener(async () => {
+  await chrome.storage.session.set({ enabled: false });
+  await reflectBadge(false);
+});
+
+// ---------------------------------------------------------------------------
 // Actualización
 // ---------------------------------------------------------------------------
 
@@ -528,8 +572,7 @@ async function checkUpdate() {
     if (!res.ok) return { current, error: 'No se pudo consultar GitHub (' + res.status + ')' };
     const remote = await res.json();
     const updateAvailable = cmpVersions(remote.version, current) > 0;
-    await chrome.action.setBadgeText({ text: updateAvailable ? '1' : '' });
-    if (updateAvailable) await chrome.action.setBadgeBackgroundColor({ color: '#e74c3c' });
+    // El badge lo usa el estado ON/OFF; la actualización se avisa en el popup.
     return { current, latest: remote.version, updateAvailable };
   } catch (e) {
     return { current, error: 'Sin conexión con GitHub: ' + e.message };
@@ -580,7 +623,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     EXTRACT_HARD_FIELDS: () => extractHardFields(),
     CHECK_UPDATE: () => checkUpdate(),
     UPDATE_NOW: () => updateNow(),
-    GET_SETTINGS: () => getSettings()
+    GET_SETTINGS: () => getSettings(),
+    GET_ENABLED: async () => ({ enabled: await getEnabled() }),
+    SET_ENABLED: () => setEnabled(msg.enabled)
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;
@@ -594,8 +639,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Alarms: chequeo diario de actualización
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   chrome.alarms.create('update-check', { periodInMinutes: 60 * 12 });
+  await chrome.storage.session.set({ enabled: false }); // arranca apagada
+  await reflectBadge(false);
   checkUpdate();
 });
 

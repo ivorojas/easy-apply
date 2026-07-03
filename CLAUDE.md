@@ -44,7 +44,12 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
 ### Flujo de datos
 
 - **Todo es local**: `chrome.storage.local` con claves `profile`, `settings`,
-  `answerCache`. No hay backend. La API key del usuario vive acá, nunca en el repo.
+  `answerCache`, `lastJob`. No hay backend. La API key del usuario vive acá, nunca en el repo.
+- **Encendido/apagado global**: flag `enabled` en `chrome.storage.session` (se borra al
+  cerrar el navegador → arranca APAGADA cada sesión). Toggle en el popup. Apagada, los
+  content scripts quedan dormidos (nada de escanear/rellenar/FAB) y el panel avisa que
+  está off. Handlers `GET_ENABLED`/`SET_ENABLED`; background hace broadcast `EA_SET_ENABLED`
+  a las pestañas; `ats.js` tiene `activate()/deactivate()`. Badge muestra "ON" en verde.
 - **Perfil** = datos duros estructurados (`firstName`, `email`, …) + `blob` (la
   "super memoria") + `cvText`/`cvName` (texto del CV, parseado UNA vez al subir con
   pdf.js vendrado en `vendor/pdf/`) + `docs` (biblioteca ilimitada de PDF/TXT/MD:

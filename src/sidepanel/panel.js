@@ -37,6 +37,13 @@ async function activeTab() {
   return tab;
 }
 
+async function isEnabled() {
+  const r = await chrome.runtime.sendMessage({ type: 'GET_ENABLED' });
+  return !!r?.enabled;
+}
+
+const OFF_MSG = '⏻ Easy Apply está apagada. Prendela desde el ícono de la extensión (toggle) y reintentá.';
+
 async function generate(question, jobContext, maxLength, resultBox) {
   const res = await chrome.runtime.sendMessage({ type: 'GENERATE_ANSWER', question, jobContext, maxLength });
   resultBox.innerHTML = '';
@@ -106,6 +113,10 @@ $('#scan').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = '⏳ leyendo…';
   try {
+    if (!(await isEnabled())) {
+      status(box, OFF_MSG);
+      return;
+    }
     const tab = await activeTab();
     const url = tab?.url || '';
     if (!tab?.id || !/^https?:/.test(url)) {
@@ -118,6 +129,10 @@ $('#scan').addEventListener('click', async () => {
       res = await chrome.tabs.sendMessage(tab.id, { type: isLinkedIn ? 'LI_SCAN' : 'EA_READ' });
     } catch {
       status(box, '🔄 Recargá esta pestaña una vez (la extensión se actualizó) y volvé a tocar “Leer pantalla”.');
+      return;
+    }
+    if (res?.disabled) {
+      status(box, '⏻ Easy Apply está apagada. Prendela desde el ícono de la extensión (toggle) y reintentá.');
       return;
     }
     if (res?.off) {
@@ -149,6 +164,10 @@ $('#manual-gen').addEventListener('click', async () => {
   if (!q) {
     box.innerHTML = '';
     return status(box, 'Pegá una pregunta primero.');
+  }
+  if (!(await isEnabled())) {
+    box.innerHTML = '';
+    return status(box, OFF_MSG);
   }
   const btn = $('#manual-gen');
   btn.disabled = true;
@@ -182,6 +201,10 @@ $('#job-capture').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = '⏳…';
   try {
+    if (!(await isEnabled())) {
+      $('#job-info').textContent = OFF_MSG;
+      return;
+    }
     const tab = await activeTab();
     const url = tab?.url || '';
     if (!tab?.id || !/^https?:/.test(url)) {
@@ -193,6 +216,10 @@ $('#job-capture').addEventListener('click', async () => {
       res = await chrome.tabs.sendMessage(tab.id, { type: /linkedin\.com/.test(url) ? 'LI_SCAN' : 'EA_READ' });
     } catch {
       $('#job-info').textContent = '🔄 Recargá esta pestaña una vez y reintentá.';
+      return;
+    }
+    if (res?.disabled) {
+      $('#job-info').textContent = '⏻ Encendé Easy Apply desde el ícono de la extensión y reintentá.';
       return;
     }
     const jc = res?.jobContext;

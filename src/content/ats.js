@@ -9,7 +9,7 @@
   const FILLED_CLASS = 'ea-filled';
   let profile = null;
   let jobContext = null;
-  const processed = new WeakSet();
+  let processed = new WeakSet();
 
   // -------------------------------------------------------------------------
   // Utilidades
@@ -698,14 +698,57 @@
     if (muts.some((m) => m.addedNodes.length)) scheduleScan();
   });
 
+  // -------------------------------------------------------------------------
+  // Encendido / apagado (controlado desde el popup; apagado por defecto)
+  // -------------------------------------------------------------------------
+
+  let active = false;
+
+  function activate() {
+    if (active) return;
+    active = true;
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    scan(true);
+  }
+
+  function removeInjected() {
+    document
+      .querySelectorAll('.ea-btn-wrap, .ea-review, .ea-file-badge, .ea-phone-badge, .ea-toast, .ea-fab, .ea-group-holder')
+      .forEach((e) => e.remove());
+    document.querySelectorAll('.' + FILLED_CLASS).forEach((e) => e.classList.remove(FILLED_CLASS));
+    fab = null;
+  }
+
+  function deactivate() {
+    if (!active) return;
+    active = false;
+    clearTimeout(scanTimer);
+    observer.disconnect();
+    removeInjected();
+    // Reset para reprocesar limpio la próxima vez que se encienda.
+    processed = new WeakSet();
+    jobContext = null;
+    jobSaved = false;
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === 'EA_SET_ENABLED') {
+      msg.enabled ? activate() : deactivate();
+      sendResponse({ ok: true });
+      return;
+    }
     if (msg?.type === 'EA_REFILL') {
       profile = null; // recargar perfil por si cambió
       jobContext = null;
+      activate();
       scan(true).then((n) => sendResponse({ ok: true, filled: n }));
       return true;
     }
     if (msg?.type === 'EA_READ') {
+      if (!active) {
+        sendResponse({ disabled: true });
+        return true;
+      }
       try {
         const data = collectFields();
         if (!data.questions.length) return; // que responda otro frame con campos
@@ -716,10 +759,15 @@
       return true;
     }
     if (msg?.type === 'EA_STATUS') {
-      sendResponse({ site: 'ats', host: location.hostname });
+      sendResponse({ site: 'ats', host: location.hostname, active });
     }
   });
 
-  scan(true);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  // Al cargar, solo actuar si la extensión está encendida en esta sesión.
+  chrome.runtime
+    .sendMessage({ type: 'GET_ENABLED' })
+    .then((r) => {
+      if (r?.enabled) activate();
+    })
+    .catch(() => {});
 })();
