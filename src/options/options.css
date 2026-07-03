@@ -210,3 +210,94 @@ small a {
   cursor: pointer;
   font-size: 15px;
 }
+
+/* CV + enriquecimiento + desplegables */
+
+summary {
+  cursor: pointer;
+}
+
+details.card > summary {
+  list-style: none;
+}
+
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.card > summary h2 {
+  margin-bottom: 0;
+}
+
+details.card > summary::before {
+  content: '▸ ';
+  color: #8f8ab3;
+}
+
+details.card[open] > summary::before {
+  content: '▾ ';
+}
+
+.preview {
+  background: #14131f;
+  border: 1px solid #3a3660;
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: #b5b0d8;
+  line-height: 1.45;
+}
+
+.link-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 6px;
+}
+
+.link-row label {
+  flex: 1;
+}
+
+.link-row .btn {
+  white-space: nowrap;
+  margin-bottom: 1px;
+}
+
+.enrich-result {
+  margin: 0 0 12px;
+}
+
+.enrich-card {
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.enrich-card.ok {
+  background: #12291d;
+  border: 1px solid #2f6b4a;
+  color: #b7e6c9;
+}
+
+.enrich-card.fail {
+  background: #2a1414;
+  border: 1px solid #6b2e2e;
+  color: #f0bcbc;
+}
+
+.enrich-head {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.enrich-card details summary {
+  color: #8fd7ab;
+  font-size: 12px;
+  margin-top: 4px;
+}

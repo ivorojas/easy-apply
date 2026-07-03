@@ -39,8 +39,47 @@
     </section>
 
     <section class="card">
-      <h2>🪪 Datos duros <small class="inline">(se rellenan solos, sin IA — son datos, se copian)</small></h2>
-      <div class="grid three">
+      <h2>🧠 Super memoria <small class="inline">(la caja gigante del "todo")</small></h2>
+      <p class="note">Meté acá TODO sin ordenar: experiencia, proyectos, automatizaciones, anécdotas, logros, herramientas, lo que sea. De acá saca material la IA para responder preguntas únicas. Regla de oro: si no está acá, la IA no lo inventa — te avisa que no tiene con qué responder.</p>
+      <textarea id="blob" rows="16" placeholder="Ej: Automaticé el reporte semanal de ventas con n8n y Google Sheets, ahorrando 5 horas por semana…&#10;&#10;Trabajé 2 años en atención al cliente en…&#10;&#10;Mi proyecto favorito fue…"></textarea>
+    </section>
+
+    <section class="card">
+      <h2>📄 Tu CV <small class="inline">(se lee una vez al subirlo, no en cada uso)</small></h2>
+      <p class="note">Subí tu currículum (PDF, TXT o Markdown). Lo leo <b>una sola vez cuando lo cargás</b>, guardo el texto y la IA lo usa como contexto igual que la super memoria. El PDF no se sube a ningún lado: se procesa acá adentro.</p>
+      <div class="row">
+        <button id="cv-pick" class="btn ghost small" type="button">📎 Subir CV</button>
+        <input type="file" id="cv-file" accept=".pdf,.txt,.md,.markdown,text/plain,application/pdf" hidden />
+        <button id="cv-clear" class="btn danger small" type="button" hidden>Quitar</button>
+      </div>
+      <div id="cv-status" class="note"></div>
+      <details id="cv-preview-wrap" hidden>
+        <summary>Ver texto leído del CV</summary>
+        <pre id="cv-preview" class="preview"></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>🔗 Traer info de tus links <small class="inline">(GitHub y portfolio)</small></h2>
+      <p class="note">Pegá tus links y tocá “Traer info”. De <b>GitHub</b> saco bio, empresa, ubicación y tus repos destacados; de tu <b>portfolio/web</b> saco el texto de la página. Todo eso queda como contexto para la IA. <b>LinkedIn no</b>: la extensión nunca toca sus servidores (y devolvería un muro de login) — esa info pegala en la super memoria.</p>
+      <div class="link-row">
+        <label>GitHub <input type="url" id="linkGithub" placeholder="https://github.com/tuusuario" /></label>
+        <button class="btn ghost small enrich" data-kind="github" data-input="linkGithub" type="button">✨ Traer info</button>
+      </div>
+      <div id="enr-github" class="enrich-result"></div>
+      <div class="link-row">
+        <label>Portfolio / web <input type="url" id="linkPortfolio" placeholder="https://tuweb.com" /></label>
+        <button class="btn ghost small enrich" data-kind="website" data-input="linkPortfolio" type="button">✨ Traer info</button>
+      </div>
+      <div id="enr-portfolio" class="enrich-result"></div>
+    </section>
+
+    <details class="card" id="hard-details">
+      <summary><h2 style="display:inline">🪪 Datos duros <small class="inline">(opcional — desplegá para editar)</small></h2></summary>
+      <p class="note">Estos son los que se rellenan solos en los formularios (sin IA — son datos, se copian). <b>Es opcional cargarlos acá.</b> Si preferís, poné todo en la super memoria de arriba y listo: la IA los usa igual para responder. Cargalos acá solo si querés que el autocompletado determinístico (nombre, mail, celu…) se dispare al instante en Greenhouse/Lever.</p>
+      <button id="extract-hard" class="btn ghost small" type="button">✨ Completar estos campos desde mi CV / super memoria</button>
+      <span id="extract-result" class="note"></span>
+      <div class="grid three" style="margin-top:12px">
         <label>Nombre <input type="text" id="firstName" /></label>
         <label>Apellido <input type="text" id="lastName" /></label>
         <label>Email <input type="email" id="email" /></label>
@@ -56,13 +95,8 @@
         <label>Expectativa salarial <input type="text" id="salary" placeholder="USD 2000/mes (opcional)" /></label>
         <label>Disponibilidad <input type="text" id="availability" placeholder="Inmediata / 2 semanas…" /></label>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>🧠 Super memoria <small class="inline">(la caja gigante del "todo")</small></h2>
-      <p class="note">Meté acá TODO sin ordenar: experiencia, proyectos, automatizaciones, anécdotas, logros, herramientas, lo que sea. De acá saca material la IA para responder preguntas únicas. Regla de oro: si no está acá, la IA no lo inventa — te avisa que no tiene con qué responder.</p>
-      <textarea id="blob" rows="16" placeholder="Ej: Automaticé el reporte semanal de ventas con n8n y Google Sheets, ahorrando 5 horas por semana…&#10;&#10;Trabajé 2 años en atención al cliente en…&#10;&#10;Mi proyecto favorito fue…"></textarea>
-    </section>
+      <p class="note" style="margin-top:10px">💡 El teléfono: si el formulario tiene una banderita de país, la extensión intenta elegir el país sola y deja el número sin el código; si no puede, te avisa cuál elegir a mano. Guardá el número completo con código, ej. <code>+54 9 11 1234 5678</code>.</p>
+    </details>
 
     <section class="card">
       <h2>🛡️ LinkedIn — modo seguro</h2>
@@ -86,6 +120,7 @@
       <small class="note">Incluye perfil, memoria, caché y ajustes (la API key también — guardá el archivo con cuidado).</small>
     </section>
   </main>
+  <script src="../../vendor/pdf/pdf.min.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

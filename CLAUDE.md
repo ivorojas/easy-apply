@@ -44,10 +44,23 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
 - **Todo es local**: `chrome.storage.local` con claves `profile`, `settings`,
   `answerCache`. No hay backend. La API key del usuario vive acá, nunca en el repo.
 - **Perfil** = datos duros estructurados (`firstName`, `email`, …) + `blob` (la
-  "super memoria", caja única sin secciones). El blob es la fuente por defecto para IA.
+  "super memoria") + `cvText`/`cvName` (texto del CV, parseado UNA vez al subir con
+  pdf.js vendrado en `vendor/pdf/`) + `enrichment` (`{github, portfolio}` traído de
+  los links del usuario). Todo eso entra al contexto de IA vía `profileBlock()`.
+  Los datos duros son OPCIONALES (desplegable en options): si el usuario pone todo
+  en el blob, la IA responde igual; los campos duros solo alimentan el autofill
+  determinístico. `EXTRACT_HARD_FIELDS` los propone desde CV/blob para que el user revise.
 - **Mensajería**: content scripts y UI hablan al service worker por
   `chrome.runtime.sendMessage` con `{type: ...}`. Tipos: `GENERATE_ANSWER`,
-  `CHOOSE_OPTION`, `SAVE_APPROVED`, `CHECK_UPDATE`, `UPDATE_NOW`, `GET_SETTINGS`.
+  `CHOOSE_OPTION`, `SAVE_APPROVED`, `ENRICH_LINK`, `EXTRACT_HARD_FIELDS`,
+  `CHECK_UPDATE`, `UPDATE_NOW`, `GET_SETTINGS`.
+- **Enriquecimiento de links**: `ENRICH_LINK` en background. GitHub → `api.github.com`
+  (bio+repos, host permission fija). Portfolio/web → fetch HTML + `htmlToText()` (pide
+  `optional_host_permissions` al dominio en runtime, desde options). **LinkedIn se
+  RECHAZA a propósito** (regla #3 + devuelve muro de login): nunca fetchear LinkedIn.
+- **Teléfono con country picker** (`fillPhone` en ats.js): parsea `+54…` a dial+ISO,
+  detecta intl-tel-input / select de países y ELIGE el país (no escribe); si no puede,
+  deja el número sin código y muestra badge de qué bandera tocar. Nunca en LinkedIn.
 - **Caché con aprendizaje**: al aprobar, se guarda `{q, a}`. En `GENERATE_ANSWER`,
   similitud ≥0.85 reusa directo; ≥0.35 se pasan como ejemplos de estilo a Gemini.
 
@@ -80,7 +93,8 @@ docs/BACKEND.md         Diseño futuro de cuentas/sync (Supabase). NO implementa
 
 ## Estado (2026-07-02)
 
-v0.1.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
-LinkedIn seguro. Pendiente futuro: más ATS (Ashby, Workable, SmartRecruiters,
-BambooHR, Workday), secciones opcionales de memoria, backend Supabase, publicación
-unlisted.
+v0.2.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
+LinkedIn seguro. v0.2 sumó: teléfono con country picker, CV parseado (pdf.js),
+enriquecimiento de links (GitHub/portfolio), datos duros opcionales/desplegables.
+Pendiente futuro: más ATS (Ashby, Workable, SmartRecruiters, BambooHR, Workday),
+secciones opcionales de memoria, backend Supabase, publicación unlisted.

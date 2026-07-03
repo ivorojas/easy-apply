@@ -183,11 +183,154 @@
       const value = hardValue(key);
       if (!value) continue;
       processed.add(el);
-      setNativeValue(el, String(value));
-      el.classList.add(FILLED_CLASS);
+      if (key === 'phone') {
+        fillPhone(el, String(value));
+      } else {
+        setNativeValue(el, String(value));
+        el.classList.add(FILLED_CLASS);
+      }
       filled++;
     }
     return filled;
+  }
+
+  // --- Teléfono: contempla campos con "country picker" (banderita) -----------
+
+  // Códigos de país frecuentes (sin +). Se prueba el prefijo más largo primero.
+  const DIAL_CODES = {
+    '1': { iso: 'us', name: 'Estados Unidos / Canadá' },
+    '34': { iso: 'es', name: 'España' },
+    '44': { iso: 'gb', name: 'Reino Unido' },
+    '33': { iso: 'fr', name: 'Francia' },
+    '39': { iso: 'it', name: 'Italia' },
+    '49': { iso: 'de', name: 'Alemania' },
+    '351': { iso: 'pt', name: 'Portugal' },
+    '52': { iso: 'mx', name: 'México' },
+    '54': { iso: 'ar', name: 'Argentina' },
+    '55': { iso: 'br', name: 'Brasil' },
+    '56': { iso: 'cl', name: 'Chile' },
+    '57': { iso: 'co', name: 'Colombia' },
+    '58': { iso: 've', name: 'Venezuela' },
+    '51': { iso: 'pe', name: 'Perú' },
+    '591': { iso: 'bo', name: 'Bolivia' },
+    '593': { iso: 'ec', name: 'Ecuador' },
+    '595': { iso: 'py', name: 'Paraguay' },
+    '598': { iso: 'uy', name: 'Uruguay' },
+    '502': { iso: 'gt', name: 'Guatemala' },
+    '503': { iso: 'sv', name: 'El Salvador' },
+    '504': { iso: 'hn', name: 'Honduras' },
+    '505': { iso: 'ni', name: 'Nicaragua' },
+    '506': { iso: 'cr', name: 'Costa Rica' },
+    '507': { iso: 'pa', name: 'Panamá' },
+    '509': { iso: 'ht', name: 'Haití' },
+    '61': { iso: 'au', name: 'Australia' },
+    '91': { iso: 'in', name: 'India' },
+    '86': { iso: 'cn', name: 'China' },
+    '81': { iso: 'jp', name: 'Japón' },
+    '82': { iso: 'kr', name: 'Corea del Sur' },
+    '27': { iso: 'za', name: 'Sudáfrica' },
+    '971': { iso: 'ae', name: 'Emiratos Árabes' },
+    '972': { iso: 'il', name: 'Israel' },
+    '31': { iso: 'nl', name: 'Países Bajos' },
+    '46': { iso: 'se', name: 'Suecia' },
+    '48': { iso: 'pl', name: 'Polonia' },
+    '353': { iso: 'ie', name: 'Irlanda' }
+  };
+
+  function parsePhone(raw) {
+    const trimmed = raw.trim();
+    const hasPlus = trimmed.startsWith('+');
+    const digits = trimmed.replace(/[^\d]/g, '');
+    if (hasPlus) {
+      for (const len of [3, 2, 1]) {
+        const code = digits.slice(0, len);
+        if (DIAL_CODES[code]) {
+          return { dial: code, ...DIAL_CODES[code], national: digits.slice(len), full: trimmed };
+        }
+      }
+    }
+    return { dial: '', iso: '', name: '', national: digits, full: trimmed };
+  }
+
+  // Detecta el widget intl-tel-input (el más común) alrededor del input.
+  function findItiContainer(el) {
+    return el.closest('.iti, .intl-tel-input, .react-tel-input, [class*="phone-input"]');
+  }
+
+  function selectItiCountry(container, iso, dial) {
+    // intl-tel-input: <li class="iti__country" data-country-code="ar">
+    let li =
+      container.querySelector(`li.iti__country[data-country-code="${iso}"]`) ||
+      container.querySelector(`li[data-country-code="${iso}"]`) ||
+      [...container.querySelectorAll('li.iti__country, li[data-dial-code]')].find(
+        (l) => (l.getAttribute('data-dial-code') || l.querySelector('.iti__dial-code')?.textContent || '').replace(/\D/g, '') === dial
+      );
+    if (!li) return false;
+    // Abrir el selector y elegir (clickear está permitido en ATS; nunca "enviar").
+    const opener = container.querySelector('.iti__selected-flag, .iti__selected-country, .selected-flag');
+    if (opener) opener.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    li.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    li.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    return true;
+  }
+
+  // Un <select> hermano de países/códigos (elige, no escribe).
+  function findCountrySelect(el) {
+    const scope = el.closest('.field, .application-question, [class*="phone"], div') || el.parentElement;
+    if (!scope) return null;
+    for (const sel of scope.querySelectorAll('select')) {
+      const txt = sel.textContent;
+      if (/\+\d|argentin|country|pa[ií]s|c[oó]digo/i.test(txt)) return sel;
+    }
+    return null;
+  }
+
+  function selectCountryInSelect(sel, info) {
+    const opts = [...sel.querySelectorAll('option')];
+    const want = opts.find((o) => {
+      const t = (o.textContent + ' ' + o.value).toLowerCase();
+      return (info.dial && t.replace(/\D/g, '').includes(info.dial)) || (info.name && t.includes(info.name.toLowerCase().split(' ')[0])) || (info.iso && o.value.toLowerCase() === info.iso);
+    });
+    if (!want) return false;
+    setNativeValue(sel, want.value);
+    return true;
+  }
+
+  function fillPhone(el, value) {
+    const info = parsePhone(value);
+    const iti = findItiContainer(el);
+    const countrySelect = !iti ? findCountrySelect(el) : null;
+
+    if (iti && info.iso) {
+      const ok = selectItiCountry(iti, info.iso, info.dial);
+      setNativeValue(el, ok ? info.national : info.full);
+      el.classList.add(FILLED_CLASS);
+      if (!ok) phoneBadge(el, info); // no pudimos elegir la bandera: avisamos
+      return;
+    }
+    if (countrySelect && info.iso) {
+      const ok = selectCountryInSelect(countrySelect, info);
+      if (ok) countrySelect.classList.add(FILLED_CLASS);
+      setNativeValue(el, ok ? info.national : info.full);
+      el.classList.add(FILLED_CLASS);
+      if (!ok) phoneBadge(el, info);
+      return;
+    }
+    // Campo simple: número completo tal cual lo guardaste.
+    setNativeValue(el, info.full);
+    el.classList.add(FILLED_CLASS);
+    // Si detectamos una banderita que no supimos operar, avisamos.
+    if ((iti || /flag|country|bandera/i.test((el.parentElement?.className || '') + (el.closest('div')?.className || ''))) && info.name) {
+      phoneBadge(el, info);
+    }
+  }
+
+  function phoneBadge(el, info) {
+    el.parentElement?.querySelector('.ea-phone-badge')?.remove();
+    const badge = document.createElement('div');
+    badge.className = 'ea-file-badge ea-phone-badge';
+    badge.textContent = `📞 Elegí el país en la banderita a mano: ${info.name || 'tu país'}${info.dial ? ` (+${info.dial})` : ''}. Dejé el número sin el código.`;
+    el.insertAdjacentElement('afterend', badge);
   }
 
   // -------------------------------------------------------------------------

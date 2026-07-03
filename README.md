@@ -6,6 +6,10 @@ Extensión de navegador (Chrome / Edge / Chromium, Manifest V3) que hace el trab
 - **Responde preguntas únicas con IA** (Gemini), usando tu perfil + el aviso del puesto como contexto, con un botón `✨ IA` al lado de cada campo.
 - **Elige la opción correcta** en menús, radios y checkboxes (no escribe donde solo se puede seleccionar).
 - **"Super memoria" editable**: una caja gigante con toda tu info, de donde la IA saca material.
+- **Subís tu CV y se lee una vez** (PDF/TXT/MD): el texto queda como contexto para la IA, sin re-procesar en cada uso.
+- **Traé info de tus links**: botón para importar tu **GitHub** (bio + repos) y tu **portfolio/web** (texto de la página) como contexto. *(LinkedIn no se toca, por seguridad.)*
+- **Teléfono con banderita**: si el formulario tiene *country picker*, intenta elegir el país solo y deja el número sin el código; si no puede, te avisa cuál tocar.
+- **Datos duros opcionales**: podés cargarlos aparte o poner todo en la super memoria; hay un botón para autocompletarlos desde tu CV/memoria (vos revisás).
 - **Aprende con el uso**: guarda las respuestas que aprobás y las reutiliza cuando aparece una pregunta parecida.
 - **LinkedIn en modo seguro**: panel de copiar/pegar, sin tocar la página, para cero riesgo de baneo.
 

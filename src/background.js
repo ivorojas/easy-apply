@@ -137,7 +137,28 @@ function profileBlock(profile) {
     .filter(([, v]) => v)
     .map(([k, v]) => `- ${k}: ${v}`)
     .join('\n');
-  return `DATOS DUROS:\n${hard || '(sin datos)'}\n\nMEMORIA COMPLETA DEL CANDIDATO (experiencia, proyectos, anécdotas):\n${profile.blob || '(vacía)'}`;
+
+  const sections = [
+    `DATOS DUROS:\n${hard || '(sin datos)'}`,
+    `MEMORIA COMPLETA DEL CANDIDATO (experiencia, proyectos, anécdotas):\n${profile.blob || '(vacía)'}`
+  ];
+
+  if (profile.cvText) {
+    sections.push(`CURRÍCULUM (texto extraído del CV que subió el candidato):\n${String(profile.cvText).slice(0, 8000)}`);
+  }
+
+  const enr = profile.enrichment || {};
+  const enrParts = [];
+  for (const key of ['github', 'portfolio']) {
+    if (enr[key]?.ok && enr[key]?.text) {
+      enrParts.push(`De su ${key} (${enr[key].url}):\n${String(enr[key].text).slice(0, 4000)}`);
+    }
+  }
+  if (enrParts.length) {
+    sections.push(`INFORMACIÓN TRAÍDA DE SUS LINKS:\n${enrParts.join('\n\n')}`);
+  }
+
+  return sections.join('\n\n');
 }
 
 function jobBlock(jobContext) {
@@ -251,6 +272,116 @@ async function saveApproved({ question, answer }) {
 }
 
 // ---------------------------------------------------------------------------
+// Enriquecimiento desde links (GitHub API + web personal). LinkedIn NUNCA.
+// ---------------------------------------------------------------------------
+
+function htmlToText(html) {
+  let s = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|section|article|br)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+  s = s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"');
+  return s.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+}
+
+async function enrichGithub(url) {
+  const m = url.match(/github\.com\/([^/?#]+)/i);
+  if (!m) return { ok: false, error: 'No parece un link de GitHub válido' };
+  const user = m[1];
+  try {
+    const uRes = await fetch(`https://api.github.com/users/${encodeURIComponent(user)}`, {
+      headers: { Accept: 'application/vnd.github+json' }
+    });
+    if (uRes.status === 404) return { ok: false, error: `El usuario "${user}" no existe en GitHub` };
+    if (uRes.status === 403) return { ok: false, error: 'GitHub limitó las consultas por ahora (probá en un rato)' };
+    if (!uRes.ok) return { ok: false, error: 'GitHub respondió ' + uRes.status };
+    const u = await uRes.json();
+    const rRes = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(user)}/repos?sort=pushed&per_page=100`,
+      { headers: { Accept: 'application/vnd.github+json' } }
+    );
+    const repos = rRes.ok ? await rRes.json() : [];
+    const top = repos
+      .filter((r) => !r.fork)
+      .sort((a, b) => b.stargazers_count - a.stargazers_count)
+      .slice(0, 12)
+      .map((r) => `- ${r.name}${r.language ? ` (${r.language})` : ''}${r.stargazers_count ? ` ⭐${r.stargazers_count}` : ''}: ${r.description || 'sin descripción'}`);
+    const langs = [...new Set(repos.map((r) => r.language).filter(Boolean))];
+    const parts = [
+      u.name && `Nombre: ${u.name}`,
+      u.bio && `Bio: ${u.bio}`,
+      u.company && `Empresa: ${u.company}`,
+      u.location && `Ubicación: ${u.location}`,
+      u.blog && `Web: ${u.blog}`,
+      `Repos públicos: ${u.public_repos} · Seguidores: ${u.followers}`,
+      langs.length && `Lenguajes: ${langs.join(', ')}`,
+      top.length && `Proyectos destacados:\n${top.join('\n')}`
+    ].filter(Boolean);
+    const summary = `@${user} · ${u.public_repos} repos · ${langs.slice(0, 5).join(', ') || 'varios lenguajes'}`;
+    return { ok: true, url, summary, text: parts.join('\n'), fetchedAt: new Date().toISOString() };
+  } catch (e) {
+    return { ok: false, error: 'Fallo de red con GitHub: ' + e.message };
+  }
+}
+
+async function enrichWebsite(url) {
+  try {
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) return { ok: false, error: 'La página respondió ' + res.status };
+    const html = await res.text();
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const text = htmlToText(html).slice(0, 6000);
+    if (!text) return { ok: false, error: 'No pude extraer texto de esa página' };
+    const summary = (titleMatch ? titleMatch[1].trim() : new URL(url).hostname) + ` · ${text.length} caracteres`;
+    return { ok: true, url, summary, text, fetchedAt: new Date().toISOString() };
+  } catch (e) {
+    return { ok: false, error: 'No pude acceder a esa URL (¿existe? ¿diste el permiso?): ' + e.message };
+  }
+}
+
+async function enrichLink({ kind, url }) {
+  if (!url) return { ok: false, error: 'Falta la URL' };
+  if (/linkedin\.com/i.test(url)) {
+    return {
+      ok: false,
+      linkedin: true,
+      error:
+        'No traigo datos de LinkedIn a propósito: la extensión nunca toca sus servidores (regla anti-baneo) y además LinkedIn devuelve un muro de login, no tu perfil. Copiá lo que quieras de tu LinkedIn y pegalo en la super memoria.'
+    };
+  }
+  if (kind === 'github' || /github\.com/i.test(url)) return enrichGithub(url);
+  return enrichWebsite(url);
+}
+
+async function extractHardFields() {
+  const profile = await getProfile();
+  const source = [profile.blob, profile.cvText].filter(Boolean).join('\n\n');
+  if (!source.trim()) return { error: 'No hay CV ni super memoria de dónde extraer' };
+  const prompt = `Extraé datos de contacto del siguiente texto de un candidato. ${NEVER_INVENT}
+Devolvé SOLO un JSON con las claves que encuentres (omití las que no estén, NO inventes):
+{"firstName","lastName","email","phone","location","yearsExp","linkedin","portfolio","github","currentCompany"}
+
+TEXTO:
+${source.slice(0, 12000)}`;
+  const result = await callGemini(prompt);
+  if (result.error) return { error: result.error };
+  const j = result.json || {};
+  const clean = {};
+  for (const k of ['firstName', 'lastName', 'email', 'phone', 'location', 'yearsExp', 'linkedin', 'portfolio', 'github', 'currentCompany']) {
+    if (j[k] && typeof j[k] === 'string') clean[k] = j[k].trim();
+  }
+  return { fields: clean };
+}
+
+// ---------------------------------------------------------------------------
 // Actualización
 // ---------------------------------------------------------------------------
 
@@ -313,6 +444,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GENERATE_ANSWER: () => generateAnswer(msg),
     CHOOSE_OPTION: () => chooseOption(msg),
     SAVE_APPROVED: () => saveApproved(msg),
+    ENRICH_LINK: () => enrichLink(msg),
+    EXTRACT_HARD_FIELDS: () => extractHardFields(),
     CHECK_UPDATE: () => checkUpdate(),
     UPDATE_NOW: () => updateNow(),
     GET_SETTINGS: () => getSettings()
