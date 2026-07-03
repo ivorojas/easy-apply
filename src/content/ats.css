@@ -84,6 +84,30 @@
   margin-top: 4px;
 }
 
+.ea-fab {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  z-index: 2147483646;
+}
+
+.ea-fab-btn {
+  all: initial;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #7c6cf0;
+  color: #fff;
+  border-radius: 999px;
+  padding: 11px 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.ea-fab-btn:hover {
+  background: #6a59e8;
+}
+
 .ea-toast {
   position: fixed;
   bottom: 24px;

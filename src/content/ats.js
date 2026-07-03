@@ -570,6 +570,72 @@
   }
 
   // -------------------------------------------------------------------------
+  // Lectura de campos para el panel (dar respuestas para copiar en cualquier sitio)
+  // -------------------------------------------------------------------------
+
+  function collectFields() {
+    const questions = [];
+    const seen = new Set();
+    const add = (label, kind, options, maxLength, value) => {
+      const clean = (label || '').replace(/\s+/g, ' ').trim();
+      if (!clean || clean.length < 2) return;
+      const dedup = clean + '|' + kind;
+      if (seen.has(dedup)) return;
+      seen.add(dedup);
+      questions.push({ label: clean, kind, options: options || null, maxLength: maxLength || null, value: value || '' });
+    };
+
+    for (const el of document.querySelectorAll('textarea, input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type])')) {
+      if (!isVisible(el)) continue;
+      const label = getLabelText(el);
+      const hard = el.tagName !== 'TEXTAREA' && matchHardField(el, label);
+      const kind = el.tagName === 'TEXTAREA' ? 'texto largo' : hard ? 'dato' : 'texto';
+      add(label, kind, null, el.maxLength > 0 ? el.maxLength : null, el.value);
+    }
+    for (const sel of document.querySelectorAll('select')) {
+      if (!isVisible(sel)) continue;
+      const options = [...sel.querySelectorAll('option')].map((o) => o.textContent.trim()).filter(Boolean);
+      if (options.length) add(getLabelText(sel), 'selección', options, null, sel.value);
+    }
+    const byName = new Map();
+    for (const input of document.querySelectorAll('input[type="radio"], input[type="checkbox"]')) {
+      if (!isVisible(input)) continue;
+      const name = input.getAttribute('name') || '__anon__' + (input.closest('fieldset, div')?.className || '');
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(input);
+    }
+    for (const [, inputs] of byName) {
+      if (inputs.length < 1) continue;
+      add(groupLabel(inputs), inputs[0].type === 'checkbox' ? 'casillas' : 'opciones', inputs.map((i) => optionLabel(i)), null, '');
+    }
+    return { questions, jobContext: extractJobContext() };
+  }
+
+  // -------------------------------------------------------------------------
+  // Botón flotante (para que siempre haya un control visible)
+  // -------------------------------------------------------------------------
+
+  function hasForms() {
+    return !!document.querySelector('input, textarea, select');
+  }
+
+  let fab = null;
+  function ensureFab() {
+    if (window.top !== window) return; // solo en la ventana principal
+    if (fab || !hasForms()) return;
+    fab = document.createElement('div');
+    fab.className = 'ea-fab';
+    fab.innerHTML = '<button class="ea-fab-btn" title="Easy Apply: rellenar esta página">✨ Rellenar</button>';
+    fab.querySelector('button').addEventListener('click', async () => {
+      profile = null;
+      jobContext = null;
+      const n = await scan(true);
+      if (!n) toast('no encontré datos tuyos para poner — cargá tu perfil en Ajustes (clic derecho en el ícono → Opciones)');
+    });
+    document.documentElement.appendChild(fab);
+  }
+
+  // -------------------------------------------------------------------------
   // Orquestación
   // -------------------------------------------------------------------------
 
@@ -585,8 +651,15 @@
     processSelects(root);
     processRadioAndCheckboxGroups(root);
     markFileInputs(root);
+    ensureFab();
+    const topFrame = window.top === window;
     if (filled > 0) toast(`completé ${filled} campo${filled > 1 ? 's' : ''} con tus datos — revisalos`);
-    else if (announce && !Object.keys(profile).length) toast('configurá tu perfil en Ajustes para que pueda rellenar');
+    else if (announce && topFrame && !Object.keys(profile).length) {
+      toast('cargá tu perfil en Ajustes (clic derecho en el ícono ✨ → Opciones) para que pueda rellenar');
+    } else if (announce && topFrame && filled === 0 && hasForms()) {
+      toast('no encontré datos tuyos para estos campos — usá el botón ✨ IA de cada pregunta o el panel para respuestas');
+    }
+    return filled;
   }
 
   function scheduleScan() {
@@ -602,7 +675,17 @@
     if (msg?.type === 'EA_REFILL') {
       profile = null; // recargar perfil por si cambió
       jobContext = null;
-      scan(true).then(() => sendResponse({ ok: true }));
+      scan(true).then((n) => sendResponse({ ok: true, filled: n }));
+      return true;
+    }
+    if (msg?.type === 'EA_READ') {
+      try {
+        const data = collectFields();
+        if (!data.questions.length) return; // que responda otro frame con campos
+        sendResponse(data);
+      } catch (e) {
+        sendResponse({ error: e.message });
+      }
       return true;
     }
     if (msg?.type === 'EA_STATUS') {

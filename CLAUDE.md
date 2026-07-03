@@ -28,8 +28,10 @@ Antes de tocar cualquier cosa, estas reglas mandan sobre cualquier "mejora":
 manifest.json          MV3. Campo `key` fija el ID: abgfpmgoacojapfgchfgmbhilckahgcl
 src/background.js       Service worker (module). TODA llamada a Gemini vive acá.
                         Caché, similitud de preguntas (Jaccard), chequeo de update.
-src/content/ats.js      Content script Greenhouse + Lever. Autofill duro, botón IA
-                        por pregunta, chooser de opciones, badge de CV. Prefijo ea-.
+src/content/ats.js      Content script en TODOS los sitios salvo LinkedIn (match
+                        http/https + exclude linkedin). Autofill duro, botón IA por
+                        pregunta, chooser de opciones, badge de CV, FAB flotante
+                        "✨ Rellenar", lectura de campos para el panel (EA_READ). ea-.
 src/content/ats.css     Estilos inyectados (all:initial en botones para no heredar).
 src/content/linkedin.js SOLO LECTURA. Modo seguro. Ver regla #3.
 src/sidepanel/          Panel lateral: modo seguro LinkedIn + generador manual.
@@ -99,5 +101,8 @@ v0.3.0 en https://github.com/ivorojas/easy-apply. MVP: Greenhouse + Lever +
 LinkedIn seguro. v0.2 sumó: teléfono con country picker, CV parseado (pdf.js),
 enriquecimiento de links (GitHub/portfolio), datos duros opcionales/desplegables.
 v0.3 sumó: biblioteca ilimitada de documentos extra (`profile.docs`) + `unlimitedStorage`.
+v0.4 (fix importante): ats.js ahora corre en TODOS los sitios salvo LinkedIn (antes
+solo Greenhouse/Lever — por eso "no funcionaba" en otras páginas). FAB flotante, panel
+lee cualquier página vía EA_READ, popup ofrece Rellenar en todo sitio http(s).
 Pendiente futuro: más ATS (Ashby, Workable, SmartRecruiters, BambooHR, Workday),
 secciones opcionales de memoria, backend Supabase, publicación unlisted.

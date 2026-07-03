@@ -13,11 +13,7 @@ async function detectSite() {
   const box = $('#site-status');
   const tab = await activeTab();
   const url = tab?.url || '';
-  if (/greenhouse\.io|lever\.co/.test(url)) {
-    box.className = 'site-status full';
-    box.innerHTML = '🟢 <b>ATS externo detectado</b> — modo a full: relleno básicos y sugiero respuestas. El envío final es tuyo.';
-    $('#refill').hidden = false;
-  } else if (/linkedin\.com/.test(url)) {
+  if (/linkedin\.com/.test(url)) {
     const { settings } = await chrome.storage.local.get('settings');
     const mode = settings?.linkedinMode || 'assistant';
     box.className = 'site-status safe';
@@ -25,9 +21,16 @@ async function detectSite() {
       mode === 'assistant'
         ? '🛡️ <b>LinkedIn — modo seguro (asistente)</b>: no toco la página, solo leo lo visible cuando me lo pedís desde el panel.'
         : '🛡️ <b>LinkedIn — apagado total</b>: no leo ni toco nada. Usá la pregunta manual del panel.';
+  } else if (/^https?:/.test(url)) {
+    const known = /greenhouse\.io|lever\.co/.test(url);
+    box.className = 'site-status full';
+    box.innerHTML = known
+      ? '🟢 <b>ATS conocido detectado</b> — relleno básicos y sugiero respuestas. El envío final es tuyo.'
+      : '🟢 <b>Modo activo</b> — puedo rellenar los campos de esta página y sugerir respuestas. El envío final es tuyo.';
+    $('#refill').hidden = false;
   } else {
     box.className = 'site-status';
-    box.innerHTML = 'Sitio sin soporte directo todavía. Podés usar el <b>panel</b> para generar respuestas y copiarlas donde quieras.';
+    box.innerHTML = 'Esta pestaña no es una página web (no puedo actuar acá). Abrí un formulario de postulación.';
   }
 }
 
@@ -54,8 +57,11 @@ $('#refill').addEventListener('click', async () => {
   if (!tab?.id) return;
   try {
     await chrome.tabs.sendMessage(tab.id, { type: 'EA_REFILL' });
-  } catch {}
-  window.close();
+    window.close();
+  } catch {
+    // La página se abrió antes de instalar/actualizar: no tiene el content script.
+    $('#site-status').innerHTML = '🔄 Recargá esta pestaña una vez y volvé a intentar (la extensión se actualizó).';
+  }
 });
 
 // --- Actualización -----------------------------------------------------------

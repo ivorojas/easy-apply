@@ -75,6 +75,29 @@ async function chooseForPanel(question, options, jobContext, resultBox) {
 
 // --- Leer pantalla (LinkedIn, modo asistente) --------------------------------
 
+function renderQuestions(res, box, safeNote) {
+  for (const q of res.questions) {
+    const item = el('div', 'q-item');
+    item.appendChild(el('div', 'q-label', q.label));
+    const meta = 'Tipo: ' + q.kind + (q.maxLength ? ` · máx ${q.maxLength} caracteres` : '');
+    item.appendChild(el('div', 'q-kind', meta));
+    if (q.options?.length) item.appendChild(el('div', 'q-options', 'Opciones: ' + q.options.join(' · ')));
+    const hasOptions = q.options?.length;
+    const isData = q.kind === 'dato';
+    const gen = el('button', 'btn primary small', hasOptions ? '✨ Qué elegir' : '✨ Generar respuesta');
+    const result = el('div');
+    gen.addEventListener('click', async () => {
+      gen.disabled = true;
+      if (hasOptions) await chooseForPanel(q.label, q.options, res.jobContext, result);
+      else await generate(q.label, res.jobContext, q.maxLength, result);
+      gen.disabled = false;
+    });
+    item.append(gen, result);
+    box.appendChild(item);
+  }
+  status(box, `Leí ${res.questions.length} campo(s) de tu pantalla. ${safeNote}`, true);
+}
+
 $('#scan').addEventListener('click', async () => {
   const btn = $('#scan');
   const box = $('#scan-result');
@@ -83,43 +106,33 @@ $('#scan').addEventListener('click', async () => {
   btn.textContent = '⏳ leyendo…';
   try {
     const tab = await activeTab();
-    if (!tab?.id || !/linkedin\.com/.test(tab.url || '')) {
-      status(box, 'Abrí esta función parado sobre una pestaña de LinkedIn con el Easy Apply abierto.');
+    const url = tab?.url || '';
+    if (!tab?.id || !/^https?:/.test(url)) {
+      status(box, 'Abrí una página web con un formulario (Greenhouse, Lever, la que sea) y volvé a tocar.');
       return;
     }
+    const isLinkedIn = /linkedin\.com/.test(url);
     let res;
     try {
-      res = await chrome.tabs.sendMessage(tab.id, { type: 'LI_SCAN' });
+      res = await chrome.tabs.sendMessage(tab.id, { type: isLinkedIn ? 'LI_SCAN' : 'EA_READ' });
     } catch {
-      status(box, 'No pude hablar con la página — recargá la pestaña de LinkedIn e intentá de nuevo.');
+      status(box, '🔄 Recargá esta pestaña una vez (la extensión se actualizó) y volvé a tocar “Leer pantalla”.');
       return;
     }
     if (res?.off) {
-      status(box, 'Estás en modo apagado total: no leo nada de LinkedIn. Usá la pregunta manual de abajo.');
+      status(box, 'Estás en modo apagado total para LinkedIn: no leo nada. Usá la pregunta manual de abajo.');
       return;
     }
     if (res?.error) return status(box, res.error);
     if (!res?.questions?.length) {
-      status(box, 'No encontré preguntas visibles. ¿Está abierto el formulario / modal de Easy Apply?');
+      status(box, 'No encontré campos visibles en esta página. Si el formulario está en un paso siguiente, abrilo y reintentá.');
       return;
     }
-    for (const q of res.questions) {
-      const item = el('div', 'q-item');
-      item.appendChild(el('div', 'q-label', q.label));
-      item.appendChild(el('div', 'q-kind', 'Tipo: ' + q.kind + (q.maxLength ? ` · máx ${q.maxLength} caracteres` : '')));
-      if (q.options?.length) item.appendChild(el('div', 'q-options', 'Opciones: ' + q.options.join(' · ')));
-      const gen = el('button', 'btn primary small', q.options?.length ? '✨ Qué elegir' : '✨ Generar respuesta');
-      const result = el('div');
-      gen.addEventListener('click', async () => {
-        gen.disabled = true;
-        if (q.options?.length) await chooseForPanel(q.label, q.options, res.jobContext, result);
-        else await generate(q.label, res.jobContext, q.maxLength, result);
-        gen.disabled = false;
-      });
-      item.append(gen, result);
-      box.appendChild(item);
-    }
-    status(box, `Leí ${res.questions.length} pregunta(s) de tu pantalla. Copiá y pegá vos — yo no toco LinkedIn.`, true);
+    renderQuestions(
+      res,
+      box,
+      isLinkedIn ? 'Copiá y pegá vos — en LinkedIn no toco nada.' : 'También intenté rellenarla sola en la página; acá tenés las respuestas para copiar por si preferís.'
+    );
   } finally {
     btn.disabled = false;
     btn.textContent = '👀 Leer pantalla';
