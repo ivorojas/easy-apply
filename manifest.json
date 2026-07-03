@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Easy Apply — Autofill de Postulaciones con IA",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Rellena postulaciones de trabajo: datos básicos en automático y respuestas a preguntas únicas con IA. Nunca envía nada solo.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzBTvHcPrshToo6L8TY9OQSvc9PKBhjD6cGNV5aAkB5+eGldszrKphR+y+QYw9ChT81zGv7L8ZuPcjkuRyuS/ICTDR0KrIxZazKd9tbwOj89EvupPQb0Zq6wLpsoLJTvio3LVA0q28dtuIEVi4j5MjnvwIAP+zjwlXwtTM0uXz+rpCDL2NOCQuGjnHY6+sARKAL9+WNSOFuS2/sHI0USQ2Aaaw0fVw6z8JgCmjFXBxNTGrPETVvDFFCL10+zAvTrSwmjXfrtMF6H+Oe3ZcVBWd3jXKdy9/nfVsZU7cfjeZ7oLvhG1e6VNFb/d+BH1ggeZyQtCaJqy9tZ7JOXlAxZ8swIDAQAB",
   "icons": {

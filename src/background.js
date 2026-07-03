@@ -70,6 +70,45 @@ function findSimilar(cache, question) {
 }
 
 // ---------------------------------------------------------------------------
+// Datos duros: si la pregunta pide un dato (email, tel, nombre…), se devuelve
+// el valor PELADO, sin IA y sin redactar oraciones. "Son datos, se copian."
+// ---------------------------------------------------------------------------
+
+const HARD_QUESTION_RULES = [
+  { re: /correo|e-?mail/i, get: (p) => p.email },
+  { re: /tel[eé]fono|celular|phone|m[oó]vil|whatsapp/i, get: (p) => p.phone },
+  { re: /linked ?in/i, get: (p) => p.linkedin },
+  { re: /git ?hub/i, get: (p) => p.github },
+  { re: /empresa|company|employer|compa[nñ][ií]a/i, get: (p) => p.currentCompany },
+  { re: /portfolio|sitio web|website|web personal|p[aá]gina web|\burl\b/i, get: (p) => p.portfolio },
+  { re: /ubicaci[oó]n|ciudad|location|\bcity\b|residenc|d[oó]nde viv[ií]s|address|direcci[oó]n/i, get: (p) => p.location },
+  { re: /a[nñ]os de experiencia|years of experience|experience/i, get: (p) => p.yearsExp },
+  { re: /expectativa salarial|pretensi[oó]n|salary|remuneraci[oó]n|compensation/i, get: (p) => p.salary },
+  { re: /autoriza|authoriz|work permit|permiso.*trabaj|elegib|eligib/i, get: (p) => p.workAuth },
+  { re: /visa|sponsorship|patrocinio/i, get: (p) => p.needsVisa },
+  { re: /disponibilidad|availability|start date|cu[aá]ndo pod[eé]s empezar|fecha de inicio/i, get: (p) => p.availability },
+  { re: /nombre completo|nombre y apellidos?|full name/i, get: (p) => [p.firstName, p.lastName].filter(Boolean).join(' ') },
+  { re: /apellidos?|last name|surname|family name/i, get: (p) => p.lastName },
+  { re: /\bnombre\b|first name|given name|primer nombre/i, get: (p) => p.firstName }
+];
+
+// Devuelve {isHard, value} si es un dato duro; null si es pregunta abierta.
+function matchHardQuestion(question, profile) {
+  const q = normalize(question);
+  const words = q.split(' ').filter(Boolean);
+  // Preguntas largas o que piden redactar → no son un dato: van a la IA.
+  if (words.length > 8) return null;
+  if (/(por que|porque|describ|contar|cont[aá]|explic|motiv|redact|why|describe|tell us)/.test(q)) return null;
+  if (/(usuario|user name|username|contrase|password)/.test(q)) return null;
+  for (const rule of HARD_QUESTION_RULES) {
+    if (rule.re.test(question)) {
+      return { isHard: true, value: String(rule.get(profile) || '').trim() };
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Gemini
 // ---------------------------------------------------------------------------
 
@@ -190,6 +229,18 @@ function jobBlock(jobContext) {
 const NEVER_INVENT = `REGLA CRÍTICA E INQUEBRANTABLE: NUNCA inventes datos, experiencias, proyectos, números ni hechos que no estén en el perfil del candidato. Un campo sin responder es MEJOR que una respuesta inventada. Si el perfil no tiene información suficiente para responder, devolvé exactamente {"no_info": true}.`;
 
 async function generateAnswer({ question, jobContext, maxLength }) {
+  const profile = await getProfile();
+
+  // 1) ¿Es un dato duro? (email, teléfono, nombre, LinkedIn…) → valor pelado, sin IA.
+  const hard = matchHardQuestion(question, profile);
+  if (hard) {
+    if (!hard.value) return { noInfo: true }; // no lo tengo → no invento
+    let value = hard.value;
+    if (maxLength && value.length > maxLength) value = value.slice(0, maxLength);
+    return { answer: value, source: 'perfil' };
+  }
+
+  // 2) Pregunta abierta → caché / IA.
   const cache = await getCache();
   const similar = findSimilar(cache, question);
 
@@ -201,7 +252,6 @@ async function generateAnswer({ question, jobContext, maxLength }) {
     return { answer, source: 'cache', cachedQuestion: entry.q };
   }
 
-  const profile = await getProfile();
   const examples = similar
     .slice(0, 3)
     .map((s) => `PREGUNTA: ${s.entry.q}\nRESPUESTA APROBADA: ${s.entry.a}`)
@@ -224,6 +274,7 @@ INSTRUCCIONES:
 - Respondé en el MISMO IDIOMA en que está escrita la pregunta.
 - ${maxLength ? `La respuesta debe tener MENOS de ${maxLength} caracteres (límite duro del campo).` : 'Sé breve: 2 a 4 oraciones salvo que la pregunta pida más.'}
 - Tono natural y concreto, primera persona, sin frases de relleno ni clichés.
+- Andá directo al contenido: nada de preámbulos tipo "Claro", "Mi respuesta es" ni repetir la pregunta.
 - Usá el contexto del puesto para que la respuesta sea a medida.
 - Devolvé SOLO un JSON válido: {"answer": "..."} o {"no_info": true}.`;
 
