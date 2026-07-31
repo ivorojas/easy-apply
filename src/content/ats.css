@@ -50,6 +50,17 @@
   padding: 5px 9px;
 }
 
+.ea-btn.ea-redo {
+  background: transparent;
+  color: #4a3fb5;
+  border: 1px solid #b9b0f0;
+  padding: 4px 10px;
+}
+
+.ea-btn.ea-redo:hover {
+  background: #ece8ff;
+}
+
 .ea-review {
   display: flex;
   align-items: center;

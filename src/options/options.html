@@ -34,6 +34,15 @@
           <small>Por defecto el más barato y rápido.</small>
         </label>
       </div>
+      <label style="margin-top:12px">
+        Idioma de las respuestas
+        <select id="answerLang">
+          <option value="auto">Automático — el idioma de cada pregunta (recomendado)</option>
+          <option value="es">Siempre español</option>
+          <option value="en">Siempre inglés</option>
+        </select>
+        <small>En automático, el idioma lo decide <b>el texto de la pregunta</b>, no el sitio: un formulario en inglés dentro de una página en español se responde en inglés. Si algo sale en el idioma equivocado, se traduce solo, y en cada respuesta tenés un botón para rehacerla en el otro idioma.</small>
+      </label>
       <button id="test-api" class="btn ghost small" type="button">Probar conexión</button>
       <span id="test-result"></span>
     </section>

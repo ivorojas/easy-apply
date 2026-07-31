@@ -83,6 +83,7 @@ label {
   color: #b5b0d8;
 }
 
+select,
 input[type="text"],
 input[type="email"],
 input[type="url"],

@@ -17,7 +17,10 @@ async function getStore(keys) {
 
 async function getSettings() {
   const { settings } = await getStore('settings');
-  return Object.assign({ apiKey: '', model: DEFAULT_MODEL, linkedinMode: 'assistant' }, settings);
+  return Object.assign(
+    { apiKey: '', model: DEFAULT_MODEL, linkedinMode: 'assistant', answerLang: 'auto' },
+    settings
+  );
 }
 
 async function getProfile() {
@@ -259,20 +262,51 @@ function jobBlock(jobContext) {
   return parts.join('\n') || '(sin contexto del aviso)';
 }
 
-// Detecta idioma del formulario/aviso para responder en el idioma correcto.
-const EN_WORDS = /\b(the|and|or|your|you|with|for|why|how|what|which|describe|tell|please|share|provide|about|experience|role|company|we|our|are|is|was|will|would|should|can|have|has|had|this|that|these|those|from|as|at|by|an|of|to|in|on|work|want|team|skills|us|hiring|cover|letter|application|apply|job|position|why|do|does)\b/g;
-const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|por|para|que|qu[eé]|con|de|del|en|y|somos|nuestro|nuestra|experiencia|puesto|empresa|trabajo|equipo|sobre|c[oó]mo|cu[aá]l|porque|tus|tu|sos|ten[eé]s|gracias|favor|m[aá]s|este|esta|estos|estas|sin|como|cont[aá]|describ[ií]|h[aá]blanos|cu[eé]ntanos|motivaci[oó]n|carta|puesto|rol)\b/g;
+// ---------------------------------------------------------------------------
+// Idioma. REGLA DE ORO: el idioma lo decide EL TEXTO DE LA PREGUNTA, nunca el
+// resto de la página. Un formulario en inglés puede vivir en un sitio con la
+// interfaz en español (ej. adzuna.com.mx) — mirar la página entera contamina.
+// ---------------------------------------------------------------------------
 
-function detectLang(text) {
+const EN_WORDS = /\b(the|and|or|your|you|with|for|why|how|what|which|who|when|where|describe|tell|please|share|provide|explain|about|experience|role|company|we|our|are|is|was|were|will|would|should|could|can|have|has|had|this|that|these|those|from|as|at|by|an|of|to|in|on|work|worked|want|team|skills|us|hiring|cover|letter|application|apply|job|position|do|does|did|been|being|there|their|it|its|any|all|more|most|years|level|systems|business|project|led|during)\b/g;
+const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|por|para|que|qu[eé]|con|de|del|en|y|o|su|sus|somos|nuestro|nuestra|experiencia|puesto|empresa|trabajo|trabaj[oóá]|equipo|sobre|c[oó]mo|cu[aá]l|cu[aá]ntos|porque|tus|tu|sos|ten[eé]s|ten[ge]|gracias|favor|m[aá]s|este|esta|estos|estas|sin|como|cont[aá]|describ[ií]|h[aá]blanos|cu[eé]ntanos|motivaci[oó]n|carta|rol|a[nñ]os|hab[eé]is|eres|est[aá]s|fuiste|has|han|desde|hasta|muy|tambi[eé]n|pero|si|no|se|le|lo)\b/g;
+
+// Puntaje de "españolidad" de un texto: -1 (inglés claro) a +1 (español claro).
+function langScore(text) {
   const t = (text || '').toLowerCase();
-  if (!t.trim()) return 'es';
-  if (/[ñ¿¡]/.test(t)) return 'es'; // señal inequívoca de español
+  if (!t.trim()) return 0;
   const en = (t.match(EN_WORDS) || []).length;
-  const es = (t.match(ES_WORDS) || []).length;
-  if (en !== es) return en > es ? 'en' : 'es';
-  // Empate: los acentos españoles desempatan; si no hay ninguno, inglés.
+  let es = (t.match(ES_WORDS) || []).length;
+  // Caracteres exclusivos del español: señal fuerte, pero PONDERADA, no un
+  // cortocircuito (un solo "año" del menú no puede decidir por la pregunta).
+  const spanishChars = (t.match(/[ñ¿¡]/g) || []).length;
   const accents = (t.match(/[áéíóúü]/g) || []).length;
-  return accents > 0 ? 'es' : 'en';
+  es += spanishChars * 2 + accents;
+  const total = en + es;
+  if (!total) return 0;
+  return (es - en) / total;
+}
+
+// Idioma destino: SOLO desde la pregunta (+ el aviso como desempate si la
+// pregunta es demasiado corta para decidir).
+function detectLang(question, jobDescription) {
+  const q = (question || '').trim();
+  const qScore = langScore(q);
+  const qWords = q.split(/\s+/).filter(Boolean).length;
+  // Con una pregunta de largo razonable, la pregunta manda y punto.
+  if (qWords >= 4 && Math.abs(qScore) > 0.05) return qScore > 0 ? 'es' : 'en';
+  // Pregunta corta/ambigua: desempatar con la descripción del aviso.
+  const dScore = langScore((jobDescription || '').slice(0, 2000));
+  const combined = qScore * 2 + dScore; // la pregunta pesa el doble
+  if (Math.abs(combined) > 0.02) return combined > 0 ? 'es' : 'en';
+  return 'es'; // sin señal alguna: español (idioma del usuario)
+}
+
+// Idioma de un texto ya generado (para verificar la respuesta del modelo).
+function textLang(text) {
+  const s = langScore(text);
+  if (Math.abs(s) < 0.03) return null; // indeterminado
+  return s > 0 ? 'es' : 'en';
 }
 
 // Contexto del aviso: si el de la página actual es flojo (formulario sin
@@ -318,43 +352,35 @@ async function saveJob(ctx) {
 
 const NEVER_INVENT = `REGLA CRÍTICA E INQUEBRANTABLE: NUNCA inventes datos, experiencias, proyectos, números ni hechos que no estén en el perfil del candidato. Un campo sin responder es MEJOR que una respuesta inventada. Si el perfil no tiene información suficiente para responder, devolvé exactamente {"no_info": true}.`;
 
-async function generateAnswer({ question, jobContext, maxLength, langSample }) {
-  const profile = await getProfile();
+const NEVER_INVENT_EN = `CRITICAL, UNBREAKABLE RULE: NEVER invent data, experiences, projects, numbers or facts that are not in the candidate's profile. Leaving a field empty is BETTER than an invented answer. If the profile lacks enough information to answer, return exactly {"no_info": true}.`;
 
-  // 1) ¿Es un dato duro? (email, teléfono, nombre, LinkedIn…) → valor pelado, sin IA.
-  const hard = matchHardQuestion(question, profile);
-  if (hard) {
-    if (!hard.value) return { noInfo: true }; // no lo tengo → no invento
-    let value = hard.value;
-    if (maxLength && value.length > maxLength) value = value.slice(0, maxLength);
-    return { answer: value, source: 'perfil' };
+// El prompt se escribe ÍNTEGRAMENTE en el idioma destino. Una sola línea
+// pidiendo "respondé en inglés" dentro de un prompt en español no alcanza:
+// el modelo sigue el idioma dominante del contexto.
+function buildAnswerPrompt({ lang, profile, job, examples, question, maxLength }) {
+  if (lang === 'en') {
+    return `You are helping a job candidate answer a question on a job application form. You write ON BEHALF of the candidate, in the first person.
+
+${NEVER_INVENT_EN}
+
+CANDIDATE PROFILE (the only source of truth about them — it is written in Spanish, but your answer MUST be in English):
+${profileBlock(profile)}
+
+JOB THEY ARE APPLYING TO:
+${jobBlock(job)}
+${examples ? `\nANSWERS THE CANDIDATE ALREADY APPROVED FOR SIMILAR QUESTIONS (match their style and content when relevant):\n${examples}\n` : ''}
+FORM QUESTION:
+"${question}"
+
+INSTRUCTIONS:
+- LANGUAGE: the form question is in English, so your answer MUST be written entirely in ENGLISH. The candidate's profile is in Spanish — translate the relevant facts into natural English. Do NOT answer in Spanish under any circumstance.
+- ${maxLength ? `The answer must be UNDER ${maxLength} characters (hard field limit).` : 'Be concise: 2 to 4 sentences unless the question asks for more.'}
+- Natural, concrete tone, first person, no filler or clichés.
+- Get straight to the content: no preambles like "Sure" or "My answer is", and do not repeat the question.
+- Use the job context so the answer is tailored.
+- Return ONLY valid JSON: {"answer": "..."} or {"no_info": true}.`;
   }
-
-  // 2) Pregunta abierta → caché / IA.
-  const cache = await getCache();
-  const similar = findSimilar(cache, question);
-
-  // Reuso directo si la pregunta es casi idéntica a una ya aprobada.
-  if (similar.length && similar[0].score >= 0.85) {
-    const entry = similar[0].entry;
-    let answer = entry.a;
-    if (maxLength && answer.length > maxLength) answer = answer.slice(0, maxLength);
-    return { answer, source: 'cache', cachedQuestion: entry.q };
-  }
-
-  const examples = similar
-    .slice(0, 3)
-    .map((s) => `PREGUNTA: ${s.entry.q}\nRESPUESTA APROBADA: ${s.entry.a}`)
-    .join('\n---\n');
-
-  const job = await resolveJobContext(jobContext);
-  // Idioma: la etiqueta sola no alcanza; se usa la muestra de texto del formulario
-  // (langSample o jobContext.sample) + la descripción del aviso.
-  const langBasis = [question, langSample, jobContext?.sample, job?.description].filter(Boolean).join(' ');
-  const lang = detectLang(langBasis);
-  const langName = lang === 'en' ? 'INGLÉS (English)' : 'ESPAÑOL';
-
-  const prompt = `Sos un asistente que ayuda a un candidato a responder preguntas de formularios de postulación de trabajo. Escribís EN NOMBRE del candidato, en primera persona.
+  return `Sos un asistente que ayuda a un candidato a responder preguntas de formularios de postulación de trabajo. Escribís EN NOMBRE del candidato, en primera persona.
 
 ${NEVER_INVENT}
 
@@ -368,20 +394,85 @@ PREGUNTA DEL FORMULARIO:
 "${question}"
 
 INSTRUCCIONES:
-- IDIOMA: escribí la respuesta ÍNTEGRAMENTE en ${langName} (es el idioma del formulario/aviso). No mezcles idiomas ni traduzcas la pregunta.
+- IDIOMA: la pregunta está en español, así que respondé ÍNTEGRAMENTE EN ESPAÑOL.
 - ${maxLength ? `La respuesta debe tener MENOS de ${maxLength} caracteres (límite duro del campo).` : 'Sé breve: 2 a 4 oraciones salvo que la pregunta pida más.'}
 - Tono natural y concreto, primera persona, sin frases de relleno ni clichés.
 - Andá directo al contenido: nada de preámbulos tipo "Claro", "Mi respuesta es" ni repetir la pregunta.
 - Usá el contexto del puesto para que la respuesta sea a medida.
 - Devolvé SOLO un JSON válido: {"answer": "..."} o {"no_info": true}.`;
+}
+
+// Red de seguridad: si la respuesta salió en el idioma equivocado, se traduce.
+async function enforceLanguage(answer, lang, maxLength) {
+  const actual = textLang(answer);
+  if (!actual || actual === lang) return { answer, translated: false };
+  const prompt =
+    lang === 'en'
+      ? `Translate the following job-application answer into natural, fluent English. Keep the first person, keep every fact exactly as-is (do not add or remove information), keep a professional but natural tone.${maxLength ? ` The result must be UNDER ${maxLength} characters.` : ''}\n\nTEXT:\n"""${answer}"""\n\nReturn ONLY valid JSON: {"answer": "the English translation"}`
+      : `Traducí la siguiente respuesta de postulación laboral a un español natural y fluido. Mantené la primera persona, los hechos exactamente igual (no agregues ni quites información) y un tono profesional pero natural.${maxLength ? ` El resultado debe tener MENOS de ${maxLength} caracteres.` : ''}\n\nTEXTO:\n"""${answer}"""\n\nDevolvé SOLO JSON válido: {"answer": "la traducción al español"}`;
+  const res = await callGemini(prompt);
+  if (res.error) return { answer, translated: false };
+  const salv = salvageAnswer(res.text);
+  if (salv && salv.answer) return { answer: salv.answer.trim(), translated: true };
+  return { answer, translated: false };
+}
+
+async function generateAnswer({ question, jobContext, maxLength, forceLang }) {
+  const profile = await getProfile();
+  const settings = await getSettings();
+
+  // 1) ¿Es un dato duro? (email, teléfono, nombre, LinkedIn…) → valor pelado, sin IA.
+  const hard = matchHardQuestion(question, profile);
+  if (hard) {
+    if (!hard.value) return { noInfo: true }; // no lo tengo → no invento
+    let value = hard.value;
+    if (maxLength && value.length > maxLength) value = value.slice(0, maxLength);
+    return { answer: value, source: 'perfil' };
+  }
+
+  const job = await resolveJobContext(jobContext);
+
+  // 2) Idioma destino: override manual > la PREGUNTA (nunca el resto de la página).
+  const preference = forceLang || settings.answerLang || 'auto';
+  const lang = preference === 'auto' ? detectLang(question, job?.description) : preference;
+
+  // 3) Caché: solo se reusa si está en el MISMO idioma que hay que responder.
+  const cache = await getCache();
+  const similar = findSimilar(cache, question).filter((s) => {
+    const l = textLang(s.entry.a);
+    return !l || l === lang;
+  });
+
+  if (similar.length && similar[0].score >= 0.85) {
+    const entry = similar[0].entry;
+    let answer = entry.a;
+    if (maxLength && answer.length > maxLength) answer = answer.slice(0, maxLength);
+    return { answer, source: 'cache', cachedQuestion: entry.q, lang };
+  }
+
+  const examples = similar
+    .slice(0, 3)
+    .map((s) => `PREGUNTA: ${s.entry.q}\nRESPUESTA APROBADA: ${s.entry.a}`)
+    .join('\n---\n');
+
+  const prompt = buildAnswerPrompt({ lang, profile, job, examples, question, maxLength });
 
   const result = await callGemini(prompt);
   if (result.error) return { error: result.error };
   const salv = salvageAnswer(result.text) || (result.json && (result.json.no_info ? { noInfo: true } : result.json.answer ? { answer: String(result.json.answer) } : null));
   if (!salv || salv.noInfo || !salv.answer) return { noInfo: true };
-  let answer = salv.answer.trim();
+
+  // 4) Verificación posterior: si salió en el idioma equivocado, se traduce.
+  const enforced = await enforceLanguage(salv.answer.trim(), lang, maxLength);
+  let answer = enforced.answer;
   if (maxLength && answer.length > maxLength) answer = answer.slice(0, maxLength).trim();
-  return { answer, source: 'ai', usedSavedJob: !!job?.fromSaved };
+  return {
+    answer,
+    source: 'ai',
+    lang,
+    translated: enforced.translated,
+    usedSavedJob: !!job?.fromSaved
+  };
 }
 
 async function chooseOption({ question, options, multi, jobContext }) {
@@ -583,13 +674,18 @@ async function setEnabled(enabled) {
 }
 
 // Al arrancar el service worker, reflejar el estado actual (persistido en la
-// sesión del navegador) en el badge.
-getEnabled().then(reflectBadge);
+// sesión del navegador) en el badge. Con catch: si el SW se apaga en el medio
+// Chrome tira "No SW" y no queremos una promesa sin manejar.
+getEnabled()
+  .then(reflectBadge)
+  .catch(() => {});
 
 // Al abrir el navegador: forzar apagado.
 chrome.runtime.onStartup.addListener(async () => {
-  await chrome.storage.session.set({ enabled: false });
-  await reflectBadge(false);
+  try {
+    await chrome.storage.session.set({ enabled: false });
+    await reflectBadge(false);
+  } catch {}
 });
 
 // ---------------------------------------------------------------------------
@@ -681,10 +777,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(async () => {
-  chrome.alarms.create('update-check', { periodInMinutes: 60 * 12 });
-  await chrome.storage.session.set({ enabled: false }); // arranca apagada
-  await reflectBadge(false);
-  checkUpdate();
+  try {
+    chrome.alarms.create('update-check', { periodInMinutes: 60 * 12 });
+    await chrome.storage.session.set({ enabled: false }); // arranca apagada
+    await reflectBadge(false);
+    await checkUpdate();
+  } catch {}
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

@@ -377,14 +377,39 @@
     return b;
   }
 
-  function reviewBar(el, question, answer, source) {
+  function reviewBar(el, question, res) {
     el.parentElement?.querySelector('.ea-review')?.remove();
     const bar = document.createElement('div');
     bar.className = 'ea-review';
     const info = document.createElement('span');
     info.className = 'ea-review-info';
+    const flag = res.lang === 'en' ? '🇬🇧 EN' : '🇪🇸 ES';
     info.textContent =
-      source === 'cache' ? '♻️ Reusada de tu caché — revisala' : '✨ Borrador de IA — revisalo antes de enviar';
+      (res.source === 'cache' ? '♻️ Reusada de tu caché' : '✨ Borrador de IA') +
+      ` (${flag}${res.translated ? ', traducida' : ''}) — revisalo antes de enviar`;
+
+    // Rehacer en el otro idioma, por si la detección se equivocó.
+    const other = res.lang === 'en' ? 'es' : 'en';
+    const redo = makeButton(other === 'en' ? '🇬🇧 en inglés' : '🇪🇸 en español', 'ea-redo');
+    redo.title = 'Volver a generar forzando el otro idioma';
+    redo.addEventListener('click', async () => {
+      redo.disabled = true;
+      redo.textContent = '⏳';
+      const maxLength = el.maxLength && el.maxLength > 0 ? el.maxLength : null;
+      const r = await sendBG({
+        type: 'GENERATE_ANSWER',
+        question,
+        jobContext: extractJobContext(),
+        maxLength,
+        forceLang: other
+      });
+      if (!r || r.__stale) return;
+      if (r.error) return toast(r.error);
+      if (r.noInfo) return toast('no tengo con qué responder esto');
+      setNativeValue(el, r.answer);
+      reviewBar(el, question, r);
+    });
+
     const approve = makeButton('✓ Aprobar y guardar', 'ea-approve');
     const discard = makeButton('✕', 'ea-discard');
     approve.addEventListener('click', async () => {
@@ -398,16 +423,14 @@
       setNativeValue(el, '');
       bar.remove();
     });
-    bar.append(info, approve, discard);
+    bar.append(info, redo, approve, discard);
     el.insertAdjacentElement('afterend', bar);
   }
 
-  // Muestra de texto alrededor del campo/página para detectar el idioma real
-  // del formulario (no alcanza con la etiqueta: muchas son cortas en inglés).
-  function pageTextSample(el) {
-    const scope = (el && el.closest('form')) || document.querySelector('main') || document.body;
-    return ((scope && scope.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
-  }
+  // NO se manda texto de la página para detectar idioma: contamina. Un formulario
+  // en inglés puede vivir en un sitio con la interfaz en español (adzuna.com.mx)
+  // y cualquier "ñ" del menú arrastraba la detección al español. El idioma lo
+  // decide el texto de la PREGUNTA, en el background.
 
   // Envía un mensaje al background tolerando el "contexto invalidado" (pasa
   // cuando se actualiza/recarga la extensión y el content script queda huérfano).
@@ -435,7 +458,6 @@
           type: 'GENERATE_ANSWER',
           question: label,
           jobContext: extractJobContext(),
-          langSample: pageTextSample(el),
           maxLength
         });
         if (!res || res.__stale) return;
@@ -444,7 +466,7 @@
         if (res.noInfo) return toast('no tengo con qué responder esto — completalo a mano');
         setNativeValue(el, res.answer);
         el.classList.add(FILLED_CLASS);
-        reviewBar(el, label, res.answer, res.source);
+        reviewBar(el, label, res);
       } finally {
         btn.disabled = false;
         btn.textContent = '✨ IA';
@@ -661,9 +683,7 @@
       if (inputs.length < 1) continue;
       add(groupLabel(inputs), inputs[0].type === 'checkbox' ? 'casillas' : 'opciones', inputs.map((i) => optionLabel(i)), null, '');
     }
-    // Copia del contexto + muestra de texto de la página para detectar idioma.
-    const jc = { ...extractJobContext(), sample: pageTextSample(null) };
-    return { questions, jobContext: jc };
+    return { questions, jobContext: extractJobContext() };
   }
 
   // -------------------------------------------------------------------------

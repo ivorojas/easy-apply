@@ -26,6 +26,7 @@ async function load() {
   }
   $('#apiKey').value = settings.apiKey || '';
   $('#model').value = settings.model || 'gemini-2.5-flash-lite';
+  $('#answerLang').value = settings.answerLang || 'auto';
   const mode = settings.linkedinMode || 'assistant';
   const radio = document.querySelector(`input[name="linkedinMode"][value="${mode}"]`);
   if (radio) radio.checked = true;
@@ -49,6 +50,7 @@ async function save() {
   const { settings = {} } = await chrome.storage.local.get('settings');
   settings.apiKey = $('#apiKey').value.trim();
   settings.model = $('#model').value.trim() || 'gemini-2.5-flash-lite';
+  settings.answerLang = $('#answerLang').value || 'auto';
   settings.linkedinMode = document.querySelector('input[name="linkedinMode"]:checked')?.value || 'assistant';
   await chrome.storage.local.set({ profile, settings });
   flashSaved();
