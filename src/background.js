@@ -776,11 +776,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Alarms: chequeo diario de actualización
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(async () => {
+// Al instalar o ACTUALIZAR: reinyectar los content scripts en las pestañas ya
+// abiertas. Sin esto, esas pestañas siguen con el código viejo (huérfano) hasta
+// que el usuario aprieta F5 — el paso invisible que hacía parecer que "no se
+// actualiza". Con esto, actualizar y listo.
+async function reinjectContentScripts() {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch {
+    return 0;
+  }
+  let done = 0;
+  for (const tab of tabs) {
+    const url = tab.url || '';
+    if (!/^https?:/.test(url)) continue;
+    const isLinkedIn = /:\/\/([^/]*\.)?linkedin\.com/.test(url);
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: !isLinkedIn },
+        files: [isLinkedIn ? 'src/content/linkedin.js' : 'src/content/ats.js']
+      });
+      if (!isLinkedIn) {
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id, allFrames: true },
+          files: ['src/content/ats.css']
+        });
+      }
+      done++;
+    } catch {
+      // Pestañas protegidas (Web Store, chrome://, PDFs) — se ignoran.
+    }
+  }
+  return done;
+}
+
+chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     chrome.alarms.create('update-check', { periodInMinutes: 60 * 12 });
     await chrome.storage.session.set({ enabled: false }); // arranca apagada
     await reflectBadge(false);
+    if (details?.reason === 'update' || details?.reason === 'install') {
+      const n = await reinjectContentScripts();
+      console.log(`[Easy Apply] v${chrome.runtime.getManifest().version} — reinyectado en ${n} pestaña(s)`);
+    }
     await checkUpdate();
   } catch {}
 });

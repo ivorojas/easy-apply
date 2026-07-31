@@ -63,7 +63,53 @@ async function detectSite() {
   } else {
     box.className = 'site-status';
     box.innerHTML = 'Esta pestaña no es una página web (no puedo actuar acá). Abrí un formulario de postulación.';
+    return;
   }
+  checkTabFresh(tab);
+}
+
+// ¿La pestaña está corriendo el código de esta versión? Si quedó vieja tras una
+// actualización, se avisa y se ofrece arreglarlo con un click (sin F5 a mano).
+async function checkTabFresh(tab) {
+  if (!tab?.id) return;
+  const mine = chrome.runtime.getManifest().version;
+  let st = null;
+  try {
+    st = await chrome.tabs.sendMessage(tab.id, { type: 'EA_STATUS' });
+  } catch {}
+  const stale = !st || (st.version && st.version !== mine);
+  if (!stale) return;
+  const box = document.querySelector('#site-status');
+  const warn = document.createElement('div');
+  warn.style.cssText = 'margin-top:8px;font-size:12px;color:#f0c674';
+  warn.textContent = st?.version
+    ? `⚠️ Esta pestaña corre la v${st.version} y la extensión es v${mine}.`
+    : '⚠️ Esta pestaña todavía no tiene el código de la extensión.';
+  const fix = document.createElement('button');
+  fix.className = 'btn small ghost';
+  fix.style.cssText = 'margin-top:6px;width:100%';
+  fix.textContent = '🔄 Actualizar esta pestaña';
+  fix.addEventListener('click', async () => {
+    fix.disabled = true;
+    fix.textContent = '⏳…';
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        files: ['src/content/ats.js']
+      });
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id, allFrames: true },
+        files: ['src/content/ats.css']
+      });
+      fix.textContent = '✓ Lista';
+      warn.textContent = '✅ Pestaña actualizada a la v' + mine + '.';
+    } catch {
+      chrome.tabs.reload(tab.id);
+      window.close();
+    }
+  });
+  box.appendChild(warn);
+  box.appendChild(fix);
 }
 
 async function checkApiKey() {

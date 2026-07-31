@@ -6,6 +6,17 @@
 (() => {
   if (/linkedin\.com$/i.test(location.hostname)) return; // por las dudas: acá jamás
 
+  const EA_VERSION = chrome.runtime.getManifest().version;
+
+  // Si se reinyecta tras una actualización, limpiar la interfaz que dejó la
+  // versión anterior (su código quedó huérfano y no puede limpiarse solo).
+  if (window.__easyApplyLoaded) {
+    document
+      .querySelectorAll('.ea-btn-wrap, .ea-review, .ea-file-badge, .ea-phone-badge, .ea-toast, .ea-fab, .ea-group-holder')
+      .forEach((e) => e.remove());
+  }
+  window.__easyApplyLoaded = EA_VERSION;
+
   const FILLED_CLASS = 'ea-filled';
   let profile = null;
   let jobContext = null;
@@ -839,7 +850,7 @@
       return true;
     }
     if (msg?.type === 'EA_STATUS') {
-      sendResponse({ site: 'ats', host: location.hostname, active });
+      sendResponse({ site: 'ats', host: location.hostname, active, version: EA_VERSION });
     }
   });
 
