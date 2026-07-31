@@ -411,6 +411,7 @@
         type: 'GENERATE_ANSWER',
         question,
         jobContext: extractJobContext(),
+        formSample: formLabelsSample(el),
         maxLength,
         forceLang: other
       });
@@ -425,7 +426,7 @@
     const discard = makeButton('✕', 'ea-discard');
     approve.addEventListener('click', async () => {
       const current = el.value; // guarda lo que quedó tras tus ediciones
-      const r = await sendBG({ type: 'SAVE_APPROVED', question, answer: current });
+      const r = await sendBG({ type: 'SAVE_APPROVED', question, answer: current, lang: res.lang });
       if (r && r.__stale) return;
       bar.remove();
       toast('respuesta guardada en tu caché');
@@ -438,10 +439,27 @@
     el.insertAdjacentElement('afterend', bar);
   }
 
-  // NO se manda texto de la página para detectar idioma: contamina. Un formulario
-  // en inglés puede vivir en un sitio con la interfaz en español (adzuna.com.mx)
-  // y cualquier "ñ" del menú arrastraba la detección al español. El idioma lo
-  // decide el texto de la PREGUNTA, en el background.
+  // Idioma: se mandan las ETIQUETAS DE LOS CAMPOS del mismo formulario. Es la
+  // señal correcta — el idioma en que está escrito el formulario — sin arrastrar
+  // el menú, el banner de cookies ni el footer del sitio (eso contaminaba: un
+  // formulario en inglés dentro de adzuna.com.mx terminaba respondido en español).
+  function formLabelsSample(el) {
+    const form = (el && el.closest('form')) || document.querySelector('form');
+    const scope = form || document.body;
+    const out = [];
+    const seen = new Set();
+    for (const f of scope.querySelectorAll('input, textarea, select')) {
+      if (!isVisible(f)) continue;
+      if (/^(hidden|submit|button|image|file)$/i.test(f.type || '')) continue;
+      const t = getLabelText(f);
+      if (t && t.length > 1 && !seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+      if (out.length >= 40) break;
+    }
+    return out.join(' · ').slice(0, 4000);
+  }
 
   // Envía un mensaje al background tolerando el "contexto invalidado" (pasa
   // cuando se actualiza/recarga la extensión y el content script queda huérfano).
@@ -469,6 +487,7 @@
           type: 'GENERATE_ANSWER',
           question: label,
           jobContext: extractJobContext(),
+          formSample: formLabelsSample(el),
           maxLength
         });
         if (!res || res.__stale) return;

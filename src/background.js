@@ -78,21 +78,21 @@ function findSimilar(cache, question) {
 // ---------------------------------------------------------------------------
 
 const HARD_QUESTION_RULES = [
-  { re: /correo|e-?mail/i, get: (p) => p.email },
-  { re: /tel[eé]fono|celular|phone|m[oó]vil|whatsapp/i, get: (p) => p.phone },
-  { re: /linked ?in/i, get: (p) => p.linkedin },
-  { re: /git ?hub/i, get: (p) => p.github },
-  { re: /empresa|company|employer|compa[nñ][ií]a/i, get: (p) => p.currentCompany },
-  { re: /portfolio|sitio web|website|web personal|p[aá]gina web|\burl\b/i, get: (p) => p.portfolio },
-  { re: /ubicaci[oó]n|ciudad|location|\bcity\b|residenc|d[oó]nde viv[ií]s|address|direcci[oó]n/i, get: (p) => p.location },
-  { re: /a[nñ]os de experiencia|years of experience|experience/i, get: (p) => p.yearsExp },
-  { re: /expectativa salarial|pretensi[oó]n|salary|remuneraci[oó]n|compensation/i, get: (p) => p.salary },
-  { re: /autoriza|authoriz|work permit|permiso.*trabaj|elegib|eligib/i, get: (p) => p.workAuth },
-  { re: /visa|sponsorship|patrocinio/i, get: (p) => p.needsVisa },
-  { re: /disponibilidad|availability|start date|cu[aá]ndo pod[eé]s empezar|fecha de inicio/i, get: (p) => p.availability },
-  { re: /nombre completo|nombre y apellidos?|full name/i, get: (p) => [p.firstName, p.lastName].filter(Boolean).join(' ') },
-  { re: /apellidos?|last name|surname|family name/i, get: (p) => p.lastName },
-  { re: /\bnombre\b|first name|given name|primer nombre/i, get: (p) => p.firstName }
+  { key: 'email', re: /correo|e-?mail/i, get: (p) => p.email },
+  { key: 'phone', re: /tel[eé]fono|celular|phone|m[oó]vil|whatsapp/i, get: (p) => p.phone },
+  { key: 'linkedin', re: /linked ?in/i, get: (p) => p.linkedin },
+  { key: 'github', re: /git ?hub/i, get: (p) => p.github },
+  { key: 'currentCompany', re: /empresa|company|employer|compa[nñ][ií]a/i, get: (p) => p.currentCompany },
+  { key: 'portfolio', re: /portfolio|sitio web|website|web personal|p[aá]gina web|\burl\b/i, get: (p) => p.portfolio },
+  { key: 'location', re: /ubicaci[oó]n|ciudad|location|\bcity\b|residenc|d[oó]nde viv[ií]s|address|direcci[oó]n/i, get: (p) => p.location },
+  { key: 'yearsExp', re: /a[nñ]os de experiencia|years of experience|experience/i, get: (p) => p.yearsExp },
+  { key: 'salary', re: /expectativa salarial|pretensi[oó]n|salary|remuneraci[oó]n|compensation/i, get: (p) => p.salary },
+  { key: 'workAuth', re: /autoriza|authoriz|work permit|permiso.*trabaj|elegib|eligib/i, get: (p) => p.workAuth },
+  { key: 'needsVisa', re: /visa|sponsorship|patrocinio/i, get: (p) => p.needsVisa },
+  { key: 'availability', re: /disponibilidad|availability|start date|cu[aá]ndo pod[eé]s empezar|fecha de inicio/i, get: (p) => p.availability },
+  { key: 'fullName', re: /nombre completo|nombre y apellidos?|full name/i, get: (p) => [p.firstName, p.lastName].filter(Boolean).join(' ') },
+  { key: 'lastName', re: /apellidos?|last name|surname|family name/i, get: (p) => p.lastName },
+  { key: 'firstName', re: /\bnombre\b|first name|given name|primer nombre/i, get: (p) => p.firstName }
 ];
 
 // Devuelve {isHard, value} si es un dato duro; null si es pregunta abierta.
@@ -105,7 +105,7 @@ function matchHardQuestion(question, profile) {
   if (/(usuario|user name|username|contrase|password)/.test(q)) return null;
   for (const rule of HARD_QUESTION_RULES) {
     if (rule.re.test(question)) {
-      return { isHard: true, value: String(rule.get(profile) || '').trim() };
+      return { isHard: true, key: rule.key, value: String(rule.get(profile) || '').trim() };
     }
   }
   return null;
@@ -287,19 +287,38 @@ function langScore(text) {
   return (es - en) / total;
 }
 
-// Idioma destino: SOLO desde la pregunta (+ el aviso como desempate si la
-// pregunta es demasiado corta para decidir).
-function detectLang(question, jobDescription) {
+// Idioma destino, en cascada de señales de MAYOR a MENOR confiabilidad.
+// Ojo con los dos extremos ya vividos:
+//   - demasiado ancho (todo el texto de la página) → el menú/cookies del sitio
+//     contaminan: un formulario inglés en un sitio español se responde en español.
+//   - demasiado angosto (solo la pregunta) → etiquetas cortas y sin palabras
+//     funcionales ("Portfolio", "Notes", "Availability") no tienen señal y caían
+//     al default español aunque el formulario entero esté en inglés.
+// El punto justo: las ETIQUETAS DEL MISMO FORMULARIO (formSample) — es el idioma
+// del formulario, no el del sitio.
+function detectLang(question, formSample, jobDescription) {
+  // 1) La pregunta, si tiene largo y señal suficientes: manda.
   const q = (question || '').trim();
   const qScore = langScore(q);
   const qWords = q.split(/\s+/).filter(Boolean).length;
-  // Con una pregunta de largo razonable, la pregunta manda y punto.
   if (qWords >= 4 && Math.abs(qScore) > 0.05) return qScore > 0 ? 'es' : 'en';
-  // Pregunta corta/ambigua: desempatar con la descripción del aviso.
+
+  // 2) Las otras etiquetas del mismo formulario.
+  const fScore = langScore((formSample || '').slice(0, 4000));
+  if (Math.abs(fScore) > 0.05) {
+    // La pregunta, aunque sea corta, sigue pesando si dijo algo.
+    const mix = qScore * 1.5 + fScore;
+    if (Math.abs(mix) > 0.02) return mix > 0 ? 'es' : 'en';
+    return fScore > 0 ? 'es' : 'en';
+  }
+
+  // 3) La descripción del aviso.
   const dScore = langScore((jobDescription || '').slice(0, 2000));
-  const combined = qScore * 2 + dScore; // la pregunta pesa el doble
+  const combined = qScore * 2 + fScore + dScore;
   if (Math.abs(combined) > 0.02) return combined > 0 ? 'es' : 'en';
-  return 'es'; // sin señal alguna: español (idioma del usuario)
+
+  // 4) Sin ninguna señal: español (idioma del usuario).
+  return 'es';
 }
 
 // Idioma de un texto ya generado (para verificar la respuesta del modelo).
@@ -325,12 +344,20 @@ async function resolveJobContext(incoming) {
     const age = Date.now() - new Date(lastJob.savedAt || 0).getTime();
     if (age <= JOB_MAX_AGE_MS) {
       // Combina: título/empresa de la página actual si existen, descripción guardada.
+      // ¿El aviso guardado es del mismo sitio que el formulario? Si no, sirve
+      // como contexto pero NO para decidir el idioma (un aviso español de otra
+      // empresa no puede arrastrar un formulario en inglés).
+      let sameSite = false;
+      try {
+        sameSite = new URL(lastJob.url).hostname === new URL(incoming?.url || lastJob.url).hostname;
+      } catch {}
       return {
         title: incoming?.title || lastJob.title,
         company: incoming?.company || lastJob.company,
         description: lastJob.description,
         url: lastJob.url,
-        fromSaved: true
+        fromSaved: true,
+        trustForLang: sameSite
       };
     }
   }
@@ -417,30 +444,46 @@ async function enforceLanguage(answer, lang, maxLength) {
   return { answer, translated: false };
 }
 
-async function generateAnswer({ question, jobContext, maxLength, forceLang }) {
+// Datos que son literales y NUNCA se traducen (mail, teléfono, URL, nombre…).
+const LITERAL_KEYS = /email|phone|linkedin|github|portfolio|firstName|lastName|fullName|yearsExp/;
+
+async function generateAnswer({ question, jobContext, maxLength, forceLang, formSample }) {
   const profile = await getProfile();
   const settings = await getSettings();
+  const job = await resolveJobContext(jobContext);
 
-  // 1) ¿Es un dato duro? (email, teléfono, nombre, LinkedIn…) → valor pelado, sin IA.
+  // 1) Idioma destino: override manual > pregunta > etiquetas del formulario > aviso.
+  const preference = forceLang || settings.answerLang || 'auto';
+  // Un aviso guardado de OTRO sitio no se usa para decidir idioma.
+  const langJobDesc = job?.fromSaved && !job?.trustForLang ? '' : job?.description;
+  const lang = preference === 'auto' ? detectLang(question, formSample, langJobDesc) : preference;
+
+  // 2) ¿Es un dato duro? (email, teléfono, nombre…) → valor del perfil, sin IA.
   const hard = matchHardQuestion(question, profile);
   if (hard) {
     if (!hard.value) return { noInfo: true }; // no lo tengo → no invento
     let value = hard.value;
+    // Los literales van tal cual. Los que son PROSA que escribió el usuario
+    // ("Sí, tengo permiso de trabajo", "Inmediata") sí se traducen si el
+    // formulario está en otro idioma — antes salían siempre en español.
+    if (!LITERAL_KEYS.test(hard.key || '')) {
+      const enforced = await enforceLanguage(value, lang, maxLength);
+      value = enforced.answer;
+      if (maxLength && value.length > maxLength) value = value.slice(0, maxLength);
+      return { answer: value, source: 'perfil', lang, translated: enforced.translated };
+    }
     if (maxLength && value.length > maxLength) value = value.slice(0, maxLength);
-    return { answer: value, source: 'perfil' };
+    return { answer: value, source: 'perfil', lang, literal: true };
   }
 
-  const job = await resolveJobContext(jobContext);
-
-  // 2) Idioma destino: override manual > la PREGUNTA (nunca el resto de la página).
-  const preference = forceLang || settings.answerLang || 'auto';
-  const lang = preference === 'auto' ? detectLang(question, job?.description) : preference;
-
   // 3) Caché: solo se reusa si está en el MISMO idioma que hay que responder.
+  // Se usa el idioma GUARDADO al aprobar; si la entrada es vieja y no lo tiene,
+  // se mide el texto. Las de idioma indeterminado NO se reusan a ciegas (ese
+  // agujero devolvía respuestas en español a formularios en inglés).
   const cache = await getCache();
   const similar = findSimilar(cache, question).filter((s) => {
-    const l = textLang(s.entry.a);
-    return !l || l === lang;
+    const l = s.entry.lang || textLang(s.entry.a);
+    return l === lang;
   });
 
   if (similar.length && similar[0].score >= 0.85) {
@@ -513,16 +556,20 @@ INSTRUCCIONES:
   return { noInfo: true };
 }
 
-async function saveApproved({ question, answer }) {
+async function saveApproved({ question, answer, lang }) {
   const cache = await getCache();
   const norm = normalize(question);
-  const existing = cache.find((e) => normalize(e.q) === norm);
+  const l = lang || textLang(answer) || 'es';
+  // Se indexa por pregunta + IDIOMA: la misma pregunta puede tener una respuesta
+  // aprobada en español y otra en inglés, y no se pisan entre sí.
+  const existing = cache.find((e) => normalize(e.q) === norm && (e.lang || textLang(e.a) || 'es') === l);
   if (existing) {
     existing.a = answer;
+    existing.lang = l;
     existing.ts = new Date().toISOString();
     existing.uses = (existing.uses || 0) + 1;
   } else {
-    cache.unshift({ q: question, a: answer, ts: new Date().toISOString(), uses: 0 });
+    cache.unshift({ q: question, a: answer, lang: l, ts: new Date().toISOString(), uses: 0 });
   }
   await chrome.storage.local.set({ answerCache: cache.slice(0, 500) });
   return { ok: true };

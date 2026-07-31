@@ -44,8 +44,15 @@ async function isEnabled() {
 
 const OFF_MSG = '⏻ Easy Apply está apagada. Prendela desde el ícono de la extensión (toggle) y reintentá.';
 
-async function generate(question, jobContext, maxLength, resultBox) {
-  const res = await chrome.runtime.sendMessage({ type: 'GENERATE_ANSWER', question, jobContext, maxLength });
+async function generate(question, jobContext, maxLength, resultBox, opts = {}) {
+  const res = await chrome.runtime.sendMessage({
+    type: 'GENERATE_ANSWER',
+    question,
+    jobContext,
+    maxLength,
+    formSample: opts.formSample,
+    forceLang: opts.forceLang
+  });
   resultBox.innerHTML = '';
   if (!res) return status(resultBox, 'Sin respuesta del fondo.');
   if (res.error === 'NO_API_KEY') return status(resultBox, 'Falta tu API key de Gemini — cargala en Ajustes.');
@@ -60,15 +67,24 @@ async function generate(question, jobContext, maxLength, resultBox) {
     copy.textContent = '✓ Copiada';
     setTimeout(() => (copy.textContent = '📋 Copiar'), 1600);
   });
-  const approve = el('button', 'btn ghost small', '💾 Aprobar y guardar');
+  const approve = el('button', 'btn ghost small', '💾 Aprobar');
   approve.addEventListener('click', async () => {
-    await chrome.runtime.sendMessage({ type: 'SAVE_APPROVED', question, answer: res.answer });
+    await chrome.runtime.sendMessage({ type: 'SAVE_APPROVED', question, answer: res.answer, lang: res.lang });
     approve.textContent = '✓ Guardada';
   });
-  actions.append(copy, approve);
+  // Rehacer en el otro idioma, igual que en la página.
+  const other = res.lang === 'en' ? 'es' : 'en';
+  const redo = el('button', 'btn ghost small', other === 'en' ? '🇬🇧 en inglés' : '🇪🇸 en español');
+  redo.addEventListener('click', async () => {
+    redo.disabled = true;
+    redo.textContent = '⏳…';
+    await generate(question, jobContext, maxLength, resultBox, { ...opts, forceLang: other });
+  });
+  actions.append(copy, approve, redo);
   resultBox.append(ans, actions);
-  if (res.source === 'cache') status(resultBox, '♻️ Reusada de tu caché de respuestas aprobadas.', true);
-  else if (res.usedSavedJob) status(resultBox, '🎯 Usé el aviso que tenías guardado como contexto.', true);
+  const flag = res.lang === 'en' ? '🇬🇧 EN' : '🇪🇸 ES';
+  if (res.source === 'cache') status(resultBox, `♻️ Reusada de tu caché (${flag}).`, true);
+  else status(resultBox, `${flag}${res.translated ? ' · traducida' : ''}${res.usedSavedJob ? ' · usé el aviso guardado' : ''}`, true);
 }
 
 async function chooseForPanel(question, options, jobContext, resultBox) {
@@ -84,6 +100,8 @@ async function chooseForPanel(question, options, jobContext, resultBox) {
 // --- Leer pantalla (LinkedIn, modo asistente) --------------------------------
 
 function renderQuestions(res, box, safeNote) {
+  // Todas las etiquetas leídas del formulario = señal de idioma del formulario.
+  const formSample = res.questions.map((q) => q.label).join(' · ').slice(0, 4000);
   for (const q of res.questions) {
     const item = el('div', 'q-item');
     item.appendChild(el('div', 'q-label', q.label));
@@ -98,7 +116,7 @@ function renderQuestions(res, box, safeNote) {
       gen.disabled = true;
       try {
         if (hasOptions) await chooseForPanel(q.label, q.options, res.jobContext, result);
-        else await generate(q.label, res.jobContext, q.maxLength, result);
+        else await generate(q.label, res.jobContext, q.maxLength, result, { formSample });
       } catch (e) {
         status(result, 'Error: ' + (e.message || e) + '. Si actualizaste la extensión, recargá la pestaña.');
       } finally {
