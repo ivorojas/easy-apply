@@ -57,7 +57,14 @@ async function generate(question, jobContext, maxLength, resultBox, opts = {}) {
   if (!res) return status(resultBox, 'Sin respuesta del fondo.');
   if (res.error === 'NO_API_KEY') return status(resultBox, 'Falta tu API key de Gemini — cargala en Ajustes.');
   if (res.error) return status(resultBox, res.error);
-  if (res.noInfo) return status(resultBox, 'No tengo con qué responder esto según tu perfil — respondela a mano.');
+  if (res.noInfo) {
+    return status(
+      resultBox,
+      res.emptyProfile
+        ? 'Tu memoria está vacía. Cargá tu experiencia en Ajustes (o subí el CV) y vuelvo a intentar.'
+        : 'No encontré nada relacionado en tu memoria/CV. Si tenés algo parecido, sumalo a la super memoria.'
+    );
+  }
 
   const ans = el('div', 'answer', res.answer);
   const actions = el('div', 'answer-actions');

@@ -377,9 +377,34 @@ async function saveJob(ctx) {
   return { ok: true, lastJob };
 }
 
-const NEVER_INVENT = `REGLA CRÍTICA E INQUEBRANTABLE: NUNCA inventes datos, experiencias, proyectos, números ni hechos que no estén en el perfil del candidato. Un campo sin responder es MEJOR que una respuesta inventada. Si el perfil no tiene información suficiente para responder, devolvé exactamente {"no_info": true}.`;
+// Dos reglas que conviven y NO se contradicen:
+//   (1) no fabricar hechos que el candidato no vivió;
+//   (2) sí razonar sobre el perfil y usar lo análogo/transferible.
+// Antes solo existía (1) y el modelo devolvía no_info ante cualquier pregunta
+// que no calzara literal — inútil teniendo experiencia parecida cargada.
+const NEVER_INVENT = `REGLAS SOBRE LA VERDAD (las dos mandan a la vez):
 
-const NEVER_INVENT_EN = `CRITICAL, UNBREAKABLE RULE: NEVER invent data, experiences, projects, numbers or facts that are not in the candidate's profile. Leaving a field empty is BETTER than an invented answer. If the profile lacks enough information to answer, return exactly {"no_info": true}.`;
+1. NUNCA FABRIQUES. No afirmes haber usado una herramienta, trabajado en una empresa, logrado un número o hecho un proyecto que NO esté en el perfil. Nada de datos inventados.
+
+2. SÍ RAZONÁ Y ADAPTÁ. Casi ninguna pregunta va a calzar literal con el perfil, y eso NO es motivo para no responder. Tu trabajo es encontrar en el perfil lo MÁS CERCANO y construir con eso:
+   - Herramientas distintas pero del mismo tipo (otro CRM, otra plataforma de automatización, otro lenguaje).
+   - Tareas análogas (si preguntan por una migración A→B y migró C→D, o integró sistemas, o movió datos: eso cuenta).
+   - Habilidades transferibles y desafíos parecidos.
+   Sé transparente sobre el alcance: decir "no hice exactamente esa migración, pero sí hice X, donde el desafío fue Y" es HONESTO, ÚTIL y es exactamente lo que se espera. Lo prohibido es decir "hice esa migración" si no la hizo.
+
+3. {"no_info": true} es el ÚLTIMO recurso, no el primero. Usalo SOLO si en todo el perfil, CV, documentos y memoria no hay absolutamente NADA relacionado ni remotamente (ni una herramienta parecida, ni una tarea análoga, ni una habilidad transferible). Si tenés aunque sea un hilo del que tirar, respondé con eso.`;
+
+const NEVER_INVENT_EN = `TRUTHFULNESS RULES (both apply at the same time):
+
+1. NEVER FABRICATE. Do not claim the candidate used a tool, worked at a company, achieved a number or delivered a project that is NOT in the profile. No invented facts.
+
+2. DO REASON AND ADAPT. Almost no question will match the profile literally, and that is NOT a reason to skip it. Your job is to find the CLOSEST relevant material in the profile and build from it:
+   - Different but equivalent tools (another CRM, another automation platform, another language).
+   - Analogous tasks (if they ask about an A→B migration and the candidate migrated C→D, integrated systems, or moved data between platforms: that counts).
+   - Transferable skills and comparable challenges.
+   Be transparent about scope: saying "I haven't done that exact migration, but I did X, where the challenge was Y" is HONEST, USEFUL and exactly what is expected. What is forbidden is claiming "I did that migration" when they did not.
+
+3. {"no_info": true} is the LAST resort, not the first. Use it ONLY if nothing in the entire profile, CV, documents and memory is even remotely related (not a similar tool, not an analogous task, not a transferable skill). If you have any thread to pull, answer with it.`;
 
 // El prompt se escribe ÍNTEGRAMENTE en el idioma destino. Una sola línea
 // pidiendo "respondé en inglés" dentro de un prompt en español no alcanza:
@@ -398,6 +423,11 @@ ${jobBlock(job)}
 ${examples ? `\nANSWERS THE CANDIDATE ALREADY APPROVED FOR SIMILAR QUESTIONS (match their style and content when relevant):\n${examples}\n` : ''}
 FORM QUESTION:
 "${question}"
+
+HOW TO WORK (do this before writing):
+1. Scan the ENTIRE profile — hard fields, memory blob, CV and extra documents — for anything related to the question: the same thing, a similar tool, an analogous task, a transferable skill.
+2. Build the answer from the closest real material you found. If it is not an exact match, say so naturally and pivot to what the candidate actually did.
+3. Only if you found NOTHING even loosely related, return {"no_info": true}.
 
 INSTRUCTIONS:
 - LANGUAGE: the form question is in English, so your answer MUST be written entirely in ENGLISH. The candidate's profile is in Spanish — translate the relevant facts into natural English. Do NOT answer in Spanish under any circumstance.
@@ -419,6 +449,11 @@ ${jobBlock(job)}
 ${examples ? `\nRESPUESTAS QUE EL CANDIDATO YA APROBÓ PARA PREGUNTAS PARECIDAS (imitá su estilo y contenido si aplican):\n${examples}\n` : ''}
 PREGUNTA DEL FORMULARIO:
 "${question}"
+
+CÓMO TRABAJAR (hacé esto antes de escribir):
+1. Recorré TODO el perfil — datos duros, memoria, CV y documentos extra — buscando algo relacionado con la pregunta: lo mismo, una herramienta parecida, una tarea análoga o una habilidad transferible.
+2. Armá la respuesta con lo más cercano que hayas encontrado. Si no es exactamente lo que preguntan, decilo con naturalidad y llevalo a lo que sí hizo.
+3. Solo si NO encontraste NADA ni remotamente relacionado, devolvé {"no_info": true}.
 
 INSTRUCCIONES:
 - IDIOMA: la pregunta está en español, así que respondé ÍNTEGRAMENTE EN ESPAÑOL.
@@ -446,6 +481,16 @@ async function enforceLanguage(answer, lang, maxLength) {
 
 // Datos que son literales y NUNCA se traducen (mail, teléfono, URL, nombre…).
 const LITERAL_KEYS = /email|phone|linkedin|github|portfolio|firstName|lastName|fullName|yearsExp/;
+
+// ¿Hay material del que la IA pueda tirar? (memoria, CV, documentos, links)
+function profileHasMaterial(profile) {
+  const chars =
+    (profile.blob || '').length +
+    (profile.cvText || '').length +
+    (Array.isArray(profile.docs) ? profile.docs.reduce((n, d) => n + (d.text || '').length, 0) : 0) +
+    Object.values(profile.enrichment || {}).reduce((n, e) => n + ((e && e.text) || '').length, 0);
+  return chars >= 200;
+}
 
 async function generateAnswer({ question, jobContext, maxLength, forceLang, formSample }) {
   const profile = await getProfile();
@@ -502,8 +547,30 @@ async function generateAnswer({ question, jobContext, maxLength, forceLang, form
 
   const result = await callGemini(prompt);
   if (result.error) return { error: result.error };
-  const salv = salvageAnswer(result.text) || (result.json && (result.json.no_info ? { noInfo: true } : result.json.answer ? { answer: String(result.json.answer) } : null));
-  if (!salv || salv.noInfo || !salv.answer) return { noInfo: true };
+  let salv = salvageAnswer(result.text) || (result.json && (result.json.no_info ? { noInfo: true } : result.json.answer ? { answer: String(result.json.answer) } : null));
+
+  // Segundo intento: si se rindió a la primera pero SÍ hay material cargado, se
+  // le insiste pidiendo explícitamente lo análogo/transferible. Muchas veces el
+  // modelo tira no_info por pereza, no porque no haya nada que decir.
+  if ((!salv || salv.noInfo || !salv.answer) && profileHasMaterial(profile)) {
+    const retry =
+      lang === 'en'
+        ? `${prompt}
+
+IMPORTANT — SECOND ATTEMPT: you just returned "no_info", but this candidate's profile DOES contain material. You are being too strict. There is almost certainly something analogous or transferable in their profile, CV or documents: a similar tool, a comparable task, a related skill. Find the closest thing and build an honest answer from it, stating clearly what they did do (and, if useful, that it is not an exact match). Only return no_info again if the profile is truly, completely unrelated to the question.`
+        : `${prompt}
+
+IMPORTANTE — SEGUNDO INTENTO: acabás de devolver "no_info", pero el perfil de este candidato SÍ tiene material cargado. Estás siendo demasiado estricto. Casi seguro hay algo análogo o transferible en su perfil, CV o documentos: una herramienta parecida, una tarea comparable, una habilidad relacionada. Encontrá lo más cercano y armá una respuesta honesta con eso, dejando claro qué SÍ hizo (y, si sirve, que no es exactamente lo mismo). Devolvé no_info de nuevo solo si el perfil realmente no tiene nada que ver con la pregunta.`;
+    const r2 = await callGemini(retry);
+    if (!r2.error) {
+      const s2 = salvageAnswer(r2.text) || (r2.json && r2.json.answer ? { answer: String(r2.json.answer) } : null);
+      if (s2 && s2.answer && !s2.noInfo) salv = s2;
+    }
+  }
+
+  if (!salv || salv.noInfo || !salv.answer) {
+    return { noInfo: true, emptyProfile: !profileHasMaterial(profile) };
+  }
 
   // 4) Verificación posterior: si salió en el idioma equivocado, se traduce.
   const enforced = await enforceLanguage(salv.answer.trim(), lang, maxLength);
@@ -540,7 +607,8 @@ ${list}
 
 INSTRUCCIONES:
 - ${multi ? 'Se pueden elegir varias. Devolvé {"indexes": [n, ...]}' : 'Se elige UNA sola. Devolvé {"index": n}'} donde n es el índice de la opción correcta según el perfil.
-- Si el perfil no permite decidir con certeza, devolvé {"no_info": true}.
+- Razoná con lo que hay: si el perfil no dice exactamente la opción pero permite inferirla con sentido común (ej. años de experiencia que caen en un rango, disponibilidad, ubicación, herramientas parecidas), elegí esa. No hace falta una coincidencia literal.
+- Devolvé {"no_info": true} solo si el perfil realmente no da ninguna base para decidir. NUNCA elijas al azar ni asumas algo que lo perjudique (por ejemplo, no afirmes autorizaciones legales, visas ni títulos que no estén en el perfil).
 - Devolvé SOLO JSON válido.`;
 
   const result = await callGemini(prompt);

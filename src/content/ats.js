@@ -493,7 +493,14 @@
         if (!res || res.__stale) return;
         if (res.error === 'NO_API_KEY') return toast('falta tu API key de Gemini — abrila en Ajustes');
         if (res.error) return toast(res.error);
-        if (res.noInfo) return toast('no tengo con qué responder esto — completalo a mano');
+        if (res.noInfo) {
+          return toast(
+            res.emptyProfile
+              ? 'tu memoria está vacía: cargá tu experiencia en Ajustes (o subí el CV) y vuelvo a intentar'
+              : 'no encontré nada relacionado en tu memoria/CV — si tenés algo parecido, sumalo a la super memoria',
+            6000
+          );
+        }
         setNativeValue(el, res.answer);
         el.classList.add(FILLED_CLASS);
         reviewBar(el, label, res);
