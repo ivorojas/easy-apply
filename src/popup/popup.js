@@ -146,15 +146,26 @@ $('#refill').addEventListener('click', async () => {
 
 async function checkUpdate(auto) {
   const st = $('#update-status');
-  if (!auto) st.textContent = 'Consultando GitHub…';
+  if (!auto) st.textContent = 'Buscando…';
   const res = await chrome.runtime.sendMessage({ type: 'CHECK_UPDATE' });
-  if (res?.error) {
-    st.textContent = auto ? 'Versión instalada.' : res.error;
+  if (!res) return;
+
+  // Caso 1: ya hay código nuevo en disco esperando — un toque y listo.
+  if (res.pendingReload) {
+    st.innerHTML = `Código nuevo listo: <b>v${res.onDisk}</b> (corriendo v${res.current}).`;
+    $('#do-update').hidden = false;
+    $('#do-update').textContent = '⚡ Aplicar actualización';
     return;
   }
-  if (res?.updateAvailable) {
-    st.textContent = `Nueva versión ${res.latest} disponible (tenés ${res.current}).`;
+  if (res.error) {
+    st.textContent = auto ? `Estás al día (v${res.current}).` : res.error;
+    return;
+  }
+  // Caso 2: hay versión nueva en GitHub para bajar.
+  if (res.updateAvailable) {
+    st.innerHTML = `Nueva versión <b>${res.latest}</b> en GitHub (tenés v${res.current}).`;
     $('#do-update').hidden = false;
+    $('#do-update').textContent = '⬇️ Actualizar ahora';
   } else {
     st.textContent = `Estás al día (v${res.current}).`;
   }
@@ -168,20 +179,24 @@ $('#do-update').addEventListener('click', async () => {
   btn.textContent = '⏳ Actualizando…';
   const res = await chrome.runtime.sendMessage({ type: 'UPDATE_NOW' });
   if (res?.ok) {
-    btn.textContent = '✓ Listo, recargando…';
-    // El service worker se recarga solo; este popup se cierra con él.
-  } else {
-    btn.disabled = false;
-    btn.textContent = '⬇️ Actualizar ahora';
-    $('#update-status').textContent = res?.hostMissing
-      ? 'El actualizador nativo no está instalado.'
-      : 'Falló la actualización: ' + (res?.error || res?.output || 'error desconocido');
-    $('#update-help').hidden = false;
-    $('#reload-ext').hidden = false;
+    btn.textContent = res.mode === 'reload' ? `✓ Aplicando v${res.to}…` : '✓ Listo, recargando…';
+    return; // la extensión se recarga sola y el popup se cierra con ella
   }
+  // No se pudo traer de GitHub (falta el actualizador nativo). Igual ofrecemos
+  // recargar, que resuelve el caso de archivos ya actualizados en disco.
+  btn.disabled = false;
+  btn.textContent = '⬇️ Actualizar ahora';
+  $('#update-status').innerHTML = res?.hostMissing
+    ? 'No puedo bajar de GitHub solo: falta registrar el actualizador (una vez).'
+    : 'Falló: ' + (res?.error || res?.output || 'error desconocido');
+  $('#update-help').hidden = false;
+  $('#reload-ext').hidden = false;
 });
 
-$('#reload-ext').addEventListener('click', () => chrome.runtime.reload());
+$('#reload-ext').addEventListener('click', async () => {
+  $('#reload-ext').textContent = '⏳ Recargando…';
+  await chrome.runtime.sendMessage({ type: 'RELOAD_EXT' });
+});
 
 loadPower().then(detectSite);
 checkApiKey();

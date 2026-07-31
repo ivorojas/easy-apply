@@ -817,17 +817,36 @@ function cmpVersions(a, b) {
   return 0;
 }
 
+// Versión de los archivos que están AHORA en el disco. Puede ser más nueva que
+// la cargada en memoria (por ejemplo tras un git pull, o si se editaron los
+// archivos): en ese caso alcanza con recargar la extensión, sin bajar nada.
+async function diskVersion() {
+  try {
+    const res = await fetch(chrome.runtime.getURL('manifest.json') + '?t=' + Date.now(), {
+      cache: 'no-store'
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j.version || null;
+  } catch {
+    return null;
+  }
+}
+
 async function checkUpdate() {
   const current = chrome.runtime.getManifest().version;
+  const onDisk = await diskVersion();
+  // ¿Ya hay código nuevo en disco esperando un reload?
+  const pendingReload = !!onDisk && cmpVersions(onDisk, current) > 0;
   try {
     const res = await fetch(UPDATE_MANIFEST_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return { current, error: 'No se pudo consultar GitHub (' + res.status + ')' };
+    if (!res.ok) return { current, onDisk, pendingReload, error: 'No se pudo consultar GitHub (' + res.status + ')' };
     const remote = await res.json();
     const updateAvailable = cmpVersions(remote.version, current) > 0;
-    // El badge lo usa el estado ON/OFF; la actualización se avisa en el popup.
-    return { current, latest: remote.version, updateAvailable };
+    const needsDownload = cmpVersions(remote.version, onDisk || current) > 0;
+    return { current, onDisk, latest: remote.version, updateAvailable, pendingReload, needsDownload };
   } catch (e) {
-    return { current, error: 'Sin conexión con GitHub: ' + e.message };
+    return { current, onDisk, pendingReload, error: 'Sin conexión con GitHub: ' + e.message };
   }
 }
 
@@ -848,12 +867,31 @@ function runNativeUpdate() {
 }
 
 async function updateNow() {
+  const current = chrome.runtime.getManifest().version;
+
+  // 1) Si el disco YA tiene código más nuevo (git pull previo, o archivos
+  //    editados), no hace falta bajar nada: recargar y listo.
+  const onDisk = await diskVersion();
+  if (onDisk && cmpVersions(onDisk, current) > 0) {
+    setTimeout(() => chrome.runtime.reload(), 400);
+    return { ok: true, mode: 'reload', from: current, to: onDisk };
+  }
+
+  // 2) Si no, intentar traer los cambios con el actualizador nativo (git pull).
   const result = await runNativeUpdate();
   if (result.ok) {
-    // Los archivos ya se actualizaron en disco: recargar la extensión los toma.
     setTimeout(() => chrome.runtime.reload(), 800);
+    return { ...result, mode: 'pull' };
   }
-  return result;
+
+  // 3) Sin actualizador nativo: recargar igual por si el disco cambió sin que
+  //    suba la versión, y avisar que falta registrarlo para el pull automático.
+  return { ...result, canReload: true, current, onDisk };
+}
+
+async function reloadExtension() {
+  setTimeout(() => chrome.runtime.reload(), 300);
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -875,6 +913,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     EXTRACT_HARD_FIELDS: () => extractHardFields(),
     CHECK_UPDATE: () => checkUpdate(),
     UPDATE_NOW: () => updateNow(),
+    RELOAD_EXT: () => reloadExtension(),
     GET_SETTINGS: () => getSettings(),
     GET_ENABLED: async () => ({ enabled: await getEnabled() }),
     SET_ENABLED: () => setEnabled(msg.enabled)
