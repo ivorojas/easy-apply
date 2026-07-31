@@ -398,29 +398,46 @@
     return ((scope && scope.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
   }
 
+  // Envía un mensaje al background tolerando el "contexto invalidado" (pasa
+  // cuando se actualiza/recarga la extensión y el content script queda huérfano).
+  async function sendBG(msg) {
+    try {
+      return await chrome.runtime.sendMessage(msg);
+    } catch (e) {
+      if (/context invalidated|Extension context|message port closed|receiving end/i.test(e.message || '')) {
+        toast('la extensión se actualizó — recargá esta pestaña (F5) y volvé a intentar', 6000);
+        return { __stale: true };
+      }
+      return { error: e.message || 'error de mensajería' };
+    }
+  }
+
   function attachAIButton(el, label) {
     const btn = makeButton('✨ IA', 'ea-ai');
     btn.title = 'Generar respuesta con IA usando tu perfil y el aviso';
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.textContent = '⏳ pensando…';
-      const maxLength = el.maxLength && el.maxLength > 0 ? el.maxLength : null;
-      const res = await chrome.runtime.sendMessage({
-        type: 'GENERATE_ANSWER',
-        question: label,
-        jobContext: extractJobContext(),
-        langSample: pageTextSample(el),
-        maxLength
-      });
-      btn.disabled = false;
-      btn.textContent = '✨ IA';
-      if (!res) return toast('sin respuesta del fondo, recargá la página');
-      if (res.error === 'NO_API_KEY') return toast('falta tu API key de Gemini — abrila en Ajustes');
-      if (res.error) return toast(res.error);
-      if (res.noInfo) return toast('no tengo con qué responder esto — completalo a mano');
-      setNativeValue(el, res.answer);
-      el.classList.add(FILLED_CLASS);
-      reviewBar(el, label, res.answer, res.source);
+      try {
+        const maxLength = el.maxLength && el.maxLength > 0 ? el.maxLength : null;
+        const res = await sendBG({
+          type: 'GENERATE_ANSWER',
+          question: label,
+          jobContext: extractJobContext(),
+          langSample: pageTextSample(el),
+          maxLength
+        });
+        if (!res || res.__stale) return;
+        if (res.error === 'NO_API_KEY') return toast('falta tu API key de Gemini — abrila en Ajustes');
+        if (res.error) return toast(res.error);
+        if (res.noInfo) return toast('no tengo con qué responder esto — completalo a mano');
+        setNativeValue(el, res.answer);
+        el.classList.add(FILLED_CLASS);
+        reviewBar(el, label, res.answer, res.source);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ IA';
+      }
     });
     const wrap = document.createElement('span');
     wrap.className = 'ea-btn-wrap';
@@ -460,22 +477,25 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.textContent = '⏳';
-      const options = getOptions();
-      const res = await chrome.runtime.sendMessage({
-        type: 'CHOOSE_OPTION',
-        question: label,
-        options,
-        multi,
-        jobContext: extractJobContext()
-      });
-      btn.disabled = false;
-      btn.textContent = '✨ elegir';
-      if (!res) return;
-      if (res.error === 'NO_API_KEY') return toast('falta tu API key de Gemini — abrila en Ajustes');
-      if (res.error) return toast(res.error);
-      if (res.noInfo) return toast('no puedo decidir esta con tus datos — elegila a mano');
-      apply(res);
-      toast('opción seleccionada — verificala');
+      try {
+        const options = getOptions();
+        const res = await sendBG({
+          type: 'CHOOSE_OPTION',
+          question: label,
+          options,
+          multi,
+          jobContext: extractJobContext()
+        });
+        if (!res || res.__stale) return;
+        if (res.error === 'NO_API_KEY') return toast('falta tu API key de Gemini — abrila en Ajustes');
+        if (res.error) return toast(res.error);
+        if (res.noInfo) return toast('no puedo decidir esta con tus datos — elegila a mano');
+        apply(res);
+        toast('opción seleccionada — verificala');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ elegir';
+      }
     });
     const wrap = document.createElement('span');
     wrap.className = 'ea-btn-wrap';

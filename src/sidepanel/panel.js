@@ -96,9 +96,14 @@ function renderQuestions(res, box, safeNote) {
     const result = el('div');
     gen.addEventListener('click', async () => {
       gen.disabled = true;
-      if (hasOptions) await chooseForPanel(q.label, q.options, res.jobContext, result);
-      else await generate(q.label, res.jobContext, q.maxLength, result);
-      gen.disabled = false;
+      try {
+        if (hasOptions) await chooseForPanel(q.label, q.options, res.jobContext, result);
+        else await generate(q.label, res.jobContext, q.maxLength, result);
+      } catch (e) {
+        status(result, 'Error: ' + (e.message || e) + '. Si actualizaste la extensión, recargá la pestaña.');
+      } finally {
+        gen.disabled = false;
+      }
     });
     item.append(gen, result);
     box.appendChild(item);
@@ -172,9 +177,14 @@ $('#manual-gen').addEventListener('click', async () => {
   const btn = $('#manual-gen');
   btn.disabled = true;
   btn.textContent = '⏳ pensando…';
-  await generate(q, ctx ? { description: ctx } : null, null, box);
-  btn.disabled = false;
-  btn.textContent = '✨ Generar respuesta';
+  try {
+    await generate(q, ctx ? { description: ctx } : null, null, box);
+  } catch (e) {
+    status(box, 'Error: ' + (e.message || e) + '. Si actualizaste la extensión, recargá la pestaña.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Generar respuesta';
+  }
 });
 
 $('#open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
