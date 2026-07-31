@@ -73,6 +73,16 @@
     return txt.replace(/\s+/g, ' ').replace(/[*✱]|\(required\)|\(optional\)/gi, '').trim();
   }
 
+  // ¿Sigue vivo el contexto de la extensión? Cuando se recarga/actualiza, el
+  // content script viejo queda huérfano y chrome.runtime.id pasa a undefined.
+  function extAlive() {
+    try {
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch {
+      return false;
+    }
+  }
+
   function toast(msg, ms = 4000) {
     let t = document.querySelector('.ea-toast');
     if (!t) {
@@ -379,7 +389,8 @@
     const discard = makeButton('✕', 'ea-discard');
     approve.addEventListener('click', async () => {
       const current = el.value; // guarda lo que quedó tras tus ediciones
-      await chrome.runtime.sendMessage({ type: 'SAVE_APPROVED', question, answer: current });
+      const r = await sendBG({ type: 'SAVE_APPROVED', question, answer: current });
+      if (r && r.__stale) return;
       bar.remove();
       toast('respuesta guardada en tu caché');
     });
@@ -687,7 +698,7 @@
   // disponible cuando el formulario esté en otra página/paso/pop-up.
   let jobSaved = false;
   function saveJobIfStrong() {
-    if (jobSaved || window.top !== window) return;
+    if (jobSaved || window.top !== window || !extAlive()) return;
     const ctx = extractJobContext();
     if ((ctx.description || '').trim().length >= 250) {
       jobSaved = true;
@@ -697,34 +708,53 @@
 
   let scanTimer = null;
   async function scan(announce) {
-    if (!profile) {
-      const store = await chrome.storage.local.get('profile');
-      profile = store.profile || {};
+    // Si la extensión se recargó, este script quedó huérfano: parar y no romper.
+    if (!extAlive()) {
+      try { observer.disconnect(); } catch {}
+      return 0;
     }
-    const root = document;
-    const filled = fillHardFields(root);
-    processQuestions(root);
-    processSelects(root);
-    processRadioAndCheckboxGroups(root);
-    markFileInputs(root);
-    ensureFab();
-    saveJobIfStrong();
-    const topFrame = window.top === window;
-    if (filled > 0) toast(`completé ${filled} campo${filled > 1 ? 's' : ''} con tus datos — revisalos`);
-    else if (announce && topFrame && !Object.keys(profile).length) {
-      toast('cargá tu perfil en Ajustes (clic derecho en el ícono ✨ → Opciones) para que pueda rellenar');
-    } else if (announce && topFrame && filled === 0 && hasForms()) {
-      toast('no encontré datos tuyos para estos campos — usá el botón ✨ IA de cada pregunta o el panel para respuestas');
+    try {
+      if (!profile) {
+        const store = await chrome.storage.local.get('profile');
+        profile = store.profile || {};
+      }
+      const root = document;
+      const filled = fillHardFields(root);
+      processQuestions(root);
+      processSelects(root);
+      processRadioAndCheckboxGroups(root);
+      markFileInputs(root);
+      ensureFab();
+      saveJobIfStrong();
+      const topFrame = window.top === window;
+      if (filled > 0) toast(`completé ${filled} campo${filled > 1 ? 's' : ''} con tus datos — revisalos`);
+      else if (announce && topFrame && !Object.keys(profile).length) {
+        toast('cargá tu perfil en Ajustes (clic derecho en el ícono ✨ → Opciones) para que pueda rellenar');
+      } else if (announce && topFrame && filled === 0 && hasForms()) {
+        toast('no encontré datos tuyos para estos campos — usá el botón ✨ IA de cada pregunta o el panel para respuestas');
+      }
+      return filled;
+    } catch (e) {
+      // Contexto invalidado u otro error: no dejar promesas sueltas.
+      if (!extAlive()) {
+        try { observer.disconnect(); } catch {}
+      }
+      return 0;
     }
-    return filled;
   }
 
   function scheduleScan() {
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => scan(false), 600);
+    scanTimer = setTimeout(() => {
+      scan(false).catch(() => {});
+    }, 600);
   }
 
   const observer = new MutationObserver((muts) => {
+    if (!extAlive()) {
+      try { observer.disconnect(); } catch {}
+      return;
+    }
     if (muts.some((m) => m.addedNodes.length)) scheduleScan();
   });
 
