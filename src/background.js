@@ -227,14 +227,19 @@ function jobBlock(jobContext) {
 }
 
 // Detecta idioma del formulario/aviso para responder en el idioma correcto.
+const EN_WORDS = /\b(the|and|or|your|you|with|for|why|how|what|which|describe|tell|please|share|provide|about|experience|role|company|we|our|are|is|was|will|would|should|can|have|has|had|this|that|these|those|from|as|at|by|an|of|to|in|on|work|want|team|skills|us|hiring|cover|letter|application|apply|job|position|why|do|does)\b/g;
+const ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|por|para|que|qu[eé]|con|de|del|en|y|somos|nuestro|nuestra|experiencia|puesto|empresa|trabajo|equipo|sobre|c[oó]mo|cu[aá]l|porque|tus|tu|sos|ten[eé]s|gracias|favor|m[aá]s|este|esta|estos|estas|sin|como|cont[aá]|describ[ií]|h[aá]blanos|cu[eé]ntanos|motivaci[oó]n|carta|puesto|rol)\b/g;
+
 function detectLang(text) {
   const t = (text || '').toLowerCase();
   if (!t.trim()) return 'es';
-  if (/[ñ¿¡]/.test(t)) return 'es';
-  const en = (t.match(/\b(the|and|your|you|with|for|why|describe|tell|please|about|experience|role|company|we|our|are|is|to|in|of|this|position)\b/g) || []).length;
-  const es = (t.match(/\b(el|la|los|las|una|por|para|que|con|de|en|somos|nuestro|nuestra|experiencia|puesto|empresa|cont[aá]|describ[ií]|por qué|trabajo|sos|tenés)\b/g) || []).length;
-  if (/[áéíóú]/.test(t) && es >= en) return 'es';
-  return en > es ? 'en' : 'es';
+  if (/[ñ¿¡]/.test(t)) return 'es'; // señal inequívoca de español
+  const en = (t.match(EN_WORDS) || []).length;
+  const es = (t.match(ES_WORDS) || []).length;
+  if (en !== es) return en > es ? 'en' : 'es';
+  // Empate: los acentos españoles desempatan; si no hay ninguno, inglés.
+  const accents = (t.match(/[áéíóúü]/g) || []).length;
+  return accents > 0 ? 'es' : 'en';
 }
 
 // Contexto del aviso: si el de la página actual es flojo (formulario sin
@@ -280,7 +285,7 @@ async function saveJob(ctx) {
 
 const NEVER_INVENT = `REGLA CRÍTICA E INQUEBRANTABLE: NUNCA inventes datos, experiencias, proyectos, números ni hechos que no estén en el perfil del candidato. Un campo sin responder es MEJOR que una respuesta inventada. Si el perfil no tiene información suficiente para responder, devolvé exactamente {"no_info": true}.`;
 
-async function generateAnswer({ question, jobContext, maxLength }) {
+async function generateAnswer({ question, jobContext, maxLength, langSample }) {
   const profile = await getProfile();
 
   // 1) ¿Es un dato duro? (email, teléfono, nombre, LinkedIn…) → valor pelado, sin IA.
@@ -310,7 +315,10 @@ async function generateAnswer({ question, jobContext, maxLength }) {
     .join('\n---\n');
 
   const job = await resolveJobContext(jobContext);
-  const lang = detectLang(question + ' ' + (job?.description || ''));
+  // Idioma: la etiqueta sola no alcanza; se usa la muestra de texto del formulario
+  // (langSample o jobContext.sample) + la descripción del aviso.
+  const langBasis = [question, langSample, jobContext?.sample, job?.description].filter(Boolean).join(' ');
+  const lang = detectLang(langBasis);
   const langName = lang === 'en' ? 'INGLÉS (English)' : 'ESPAÑOL';
 
   const prompt = `Sos un asistente que ayuda a un candidato a responder preguntas de formularios de postulación de trabajo. Escribís EN NOMBRE del candidato, en primera persona.

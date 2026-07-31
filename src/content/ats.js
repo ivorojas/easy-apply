@@ -391,6 +391,13 @@
     el.insertAdjacentElement('afterend', bar);
   }
 
+  // Muestra de texto alrededor del campo/página para detectar el idioma real
+  // del formulario (no alcanza con la etiqueta: muchas son cortas en inglés).
+  function pageTextSample(el) {
+    const scope = (el && el.closest('form')) || document.querySelector('main') || document.body;
+    return ((scope && scope.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
+  }
+
   function attachAIButton(el, label) {
     const btn = makeButton('✨ IA', 'ea-ai');
     btn.title = 'Generar respuesta con IA usando tu perfil y el aviso';
@@ -402,6 +409,7 @@
         type: 'GENERATE_ANSWER',
         question: label,
         jobContext: extractJobContext(),
+        langSample: pageTextSample(el),
         maxLength
       });
       btn.disabled = false;
@@ -622,7 +630,9 @@
       if (inputs.length < 1) continue;
       add(groupLabel(inputs), inputs[0].type === 'checkbox' ? 'casillas' : 'opciones', inputs.map((i) => optionLabel(i)), null, '');
     }
-    return { questions, jobContext: extractJobContext() };
+    // Copia del contexto + muestra de texto de la página para detectar idioma.
+    const jc = { ...extractJobContext(), sample: pageTextSample(null) };
+    return { questions, jobContext: jc };
   }
 
   // -------------------------------------------------------------------------
