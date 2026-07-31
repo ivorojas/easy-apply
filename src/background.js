@@ -112,6 +112,22 @@ function matchHardQuestion(question, profile) {
 // Gemini
 // ---------------------------------------------------------------------------
 
+// Intenta sacar un objeto JSON de un texto (quita ```json, busca llaves…).
+function salvageJson(text) {
+  if (!text) return null;
+  let t = String(text).trim().replace(/^```(json)?/i, '').replace(/```$/i, '').trim();
+  try {
+    return JSON.parse(t);
+  } catch {}
+  const m = t.match(/\{[\s\S]*\}/);
+  if (m) {
+    try {
+      return JSON.parse(m[0]);
+    } catch {}
+  }
+  return null;
+}
+
 async function callGemini(prompt) {
   const settings = await getSettings();
   if (!settings.apiKey) {
@@ -128,7 +144,7 @@ async function callGemini(prompt) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.4,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 4096,
           responseMimeType: 'application/json'
         }
       })
@@ -138,24 +154,41 @@ async function callGemini(prompt) {
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    if (res.status === 400 && body.includes('API key')) return { error: 'API key inválida' };
+    if (res.status === 400 && /API key|API_KEY/.test(body)) return { error: 'API key inválida' };
     if (res.status === 429) return { error: 'Límite de uso de Gemini alcanzado, esperá un momento' };
+    if (res.status === 404) return { error: `El modelo "${model}" no existe o no está disponible con tu key` };
     return { error: `Gemini respondió ${res.status}` };
   }
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-  try {
-    return { json: JSON.parse(text) };
-  } catch {
-    // A veces el modelo envuelve el JSON en ```json ... ```
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return { json: JSON.parse(m[0]) };
-      } catch {}
-    }
-    return { error: 'Respuesta de IA no parseable' };
+  const cand = data?.candidates?.[0];
+  const finishReason = cand?.finishReason || '';
+  const text = cand?.content?.parts?.map((p) => p.text || '').join('') || '';
+  if (!text) {
+    if (finishReason === 'SAFETY') return { error: 'Gemini bloqueó la respuesta por filtros de seguridad' };
+    if (finishReason === 'MAX_TOKENS') return { error: 'La respuesta se cortó por longitud, probá de nuevo' };
+    return { error: 'Gemini devolvió una respuesta vacía' };
   }
+  return { json: salvageJson(text), text, finishReason };
+}
+
+// Rescata la respuesta de texto aunque el JSON venga roto/cortado.
+function salvageAnswer(text) {
+  if (!text) return null;
+  const obj = salvageJson(text);
+  if (obj) {
+    if (obj.no_info) return { noInfo: true };
+    if (typeof obj.answer === 'string' && obj.answer.trim()) return { answer: obj.answer.trim() };
+  }
+  // JSON cortado: extraer el valor de "answer" aunque no cierre la comilla.
+  const m = String(text).match(/"answer"\s*:\s*"([\s\S]*?)(?:"\s*[},]|$)/);
+  if (m && m[1]) {
+    const val = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+    if (val) return { answer: val };
+  }
+  // Texto plano (el modelo ignoró el formato JSON): usarlo tal cual.
+  const plain = String(text).replace(/```(json)?/gi, '').trim();
+  if (plain && !plain.startsWith('{')) return { answer: plain };
+  return null;
 }
 
 function profileBlock(profile) {
@@ -344,9 +377,9 @@ INSTRUCCIONES:
 
   const result = await callGemini(prompt);
   if (result.error) return { error: result.error };
-  const json = result.json;
-  if (json.no_info || !json.answer) return { noInfo: true };
-  let answer = String(json.answer).trim();
+  const salv = salvageAnswer(result.text) || (result.json && (result.json.no_info ? { noInfo: true } : result.json.answer ? { answer: String(result.json.answer) } : null));
+  if (!salv || salv.noInfo || !salv.answer) return { noInfo: true };
+  let answer = salv.answer.trim();
   if (maxLength && answer.length > maxLength) answer = answer.slice(0, maxLength).trim();
   return { answer, source: 'ai', usedSavedJob: !!job?.fromSaved };
 }
@@ -378,8 +411,8 @@ INSTRUCCIONES:
 
   const result = await callGemini(prompt);
   if (result.error) return { error: result.error };
-  const json = result.json;
-  if (json.no_info) return { noInfo: true };
+  const json = result.json || salvageJson(result.text);
+  if (!json || json.no_info) return { noInfo: true };
   if (multi && Array.isArray(json.indexes)) {
     const idx = json.indexes.map(Number).filter((n) => n >= 0 && n < options.length);
     return idx.length ? { indexes: idx } : { noInfo: true };
@@ -507,7 +540,7 @@ TEXTO:
 ${source.slice(0, 12000)}`;
   const result = await callGemini(prompt);
   if (result.error) return { error: result.error };
-  const j = result.json || {};
+  const j = result.json || salvageJson(result.text) || {};
   const clean = {};
   for (const k of ['firstName', 'lastName', 'email', 'phone', 'location', 'yearsExp', 'linkedin', 'portfolio', 'github', 'currentCompany']) {
     if (j[k] && typeof j[k] === 'string') clean[k] = j[k].trim();
